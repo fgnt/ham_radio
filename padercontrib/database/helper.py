@@ -4,7 +4,7 @@ import collections
 
 import click
 
-from paderbox.database.keys import *
+from padercontrib.database.keys import *
 from paderbox.io.json_module import dump_json
 
 
