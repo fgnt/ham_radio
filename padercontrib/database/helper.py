@@ -59,18 +59,24 @@ def check_audio_files_exist(
 
     >>> check_audio_files_exist({2: [1, '/net/db/timit/pcm/train/dr1/fcjf0/sa1.wav', 'abc.wav']})
     Traceback (most recent call last):
-    ...
+      ...
     AssertionError: ('abc.wav', (2, '2'))
     >>> check_audio_files_exist(1)
+    Traceback (most recent call last):
+      ...
+    AssertionError: Expect at least one wav file. It is likely that the database folder is empty and the greps did not work. to_check: {}
     >>> check_audio_files_exist('abc.wav')
     Traceback (most recent call last):
-    ...
+      ...
     AssertionError: ('abc.wav', ())
     >>> check_audio_files_exist('/net/db/timit/pcm/train/dr1/fcjf0/sa1.wav')
     >>> check_audio_files_exist(1, speedup='thread')
+    Traceback (most recent call last):
+      ...
+    AssertionError: Expect at least one wav file. It is likely that the database folder is empty and the greps did not work. to_check: {}
     >>> check_audio_files_exist('abc.wav', speedup='thread')
     Traceback (most recent call last):
-    ...
+      ...
     AssertionError: ('abc.wav', ())
     >>> check_audio_files_exist('/net/db/timit/pcm/train/dr1/fcjf0/sa1.wav', speedup='thread')
     """
