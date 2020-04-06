@@ -211,6 +211,9 @@ class RadioProvider(Configurable):
         if 'speech_annotation' in example:
             out_dict[K.TARGET_TIME_VAD] = jsonpickle.loads(
                 example['speech_annotation'])[:]
+        elif 'alignment_activity' in example:
+            out_dict[K.TARGET_TIME_VAD] = jsonpickle.loads(
+                example['alignment_activity'])[:]
         out_dict['audio_keys'].append(K.TARGET_TIME_VAD)
         return out_dict
 

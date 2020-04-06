@@ -4,8 +4,9 @@ import jsonpickle
 import numpy as np
 import paderbox as pb
 
-from padercontrib.database import keys as K
 from paderbox.array.intervall import ArrayIntervall
+
+from segmented_rnn import keys as K
 from segmented_rnn.database.utils import click_common_options
 from segmented_rnn.database.utils import click_convert_to_path
 from segmented_rnn.database.utils import dump_database_as_json
@@ -23,7 +24,7 @@ HRL_K = HamRadioLibrispeechKeys
 def get_example(audio, org_json):
     station, _id = audio.stem.split('__')
     ex = org_json[_id].copy()
-    num_samples = pb.io.audio_length(audio)
+    num_samples = pb.io.audioread.audio_length(audio)
     ex['silence_length'][0] += SAMPLE_RATE * 5
     ex['silence_length'][-1] += SAMPLE_RATE
     ex['silence_length'] = [l // 2 for l in ex['silence_length']]
@@ -50,7 +51,7 @@ def get_example(audio, org_json):
     sum(activity) // 2, sum(activity_freq))
     assert np.isclose(activity_freq.shape[-1], num_samples, 1e-1), (
     activity_freq.shape, num_samples)
-    ex['alignment_activity'] = jsonpickle.dumps(
+    ex['speech_annotation'] = jsonpickle.dumps(
         ArrayIntervall(activity_freq))
     assert np.isclose(np.sum(ex['speech_length']), np.sum(activity_time), 0.1), (
     sum(ex['speech_length']), sum(activity_time))
@@ -93,7 +94,7 @@ def create_database(database_path, origin_path):
 
 
 @click.command()
-@click_common_options('ham_radio_librispeech_v1.json', '/net/vol/ham/Cut')
+@click_common_options('ham_radio.json', '/net/vol/ham/Cut')
 @click.option(
     '--origin-path', default='/net/vol/jensheit/plath/data/clean_evaluation',
     help=f'Path with clean librispeech combinations.',
