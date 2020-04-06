@@ -1,5 +1,6 @@
 AUDIO_PATH = 'audio_path'
 AUDIO_DATA = 'audio_data'
+DATASETS = 'datasets'
 EXAMPLE_ID = 'example_id'
 OBSERVATION = 'observation'
 OBSERVATION_STFT = 'observation_stft'

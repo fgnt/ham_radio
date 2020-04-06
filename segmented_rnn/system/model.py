@@ -9,14 +9,12 @@ from einops import rearrange
 from paderbox.array import segment_axis
 from padertorch.summary.tbx_utils import spectrogram_to_image, mask_to_image
 from segmented_rnn import keys as K
-
-from .module import CNN1d, CNN2d, Pool1d
+from segmented_rnn.system.module import CNN1d, CNN2d, Pool1d
 
 
 class BinomialClassifier(pt.Model):
     """
     >>> cnn = BinomialClassifier(**{\
-        'label_key': 'labels',\
         'cnn_2d': CNN2d(**{\
             'in_channels': 1,\
             'hidden_channels': 32,\
@@ -44,19 +42,11 @@ class BinomialClassifier(pt.Model):
     >>> review = cnn.review(inputs, outputs)
 
     >>> cnn_gru = BinomialClassifier(**{\
-        'label_key': 'labels',\
         'cnn_2d': CNN2d(**{\
             'in_channels': 1,\
             'hidden_channels': 32,\
             'num_layers': 3,\
             'out_channels': 16,\
-            'kernel_size': 3\
-        }),\
-        'cnn_1d': CNN1d(**{\
-            'in_channels': 1024,\
-            'hidden_channels': 32,\
-            'num_layers': 3,\
-            'out_channels': 10,\
             'kernel_size': 3\
         }),\
         'rnn': torch.nn.GRU(**{\
@@ -66,8 +56,8 @@ class BinomialClassifier(pt.Model):
                 'dropout':0.5,\
                 'bidirectional':True\
         }),\
-        'pooling': Pool1d('max', 10),\
-        'smooth_with_rnn': True\
+        'pooling': Pool1d('max', 16),\
+        'segmented_rnn': True\
     })
     >>> inputs = {\
         'speech_features': torch.zeros(3, 1, 400, 64),\
@@ -76,7 +66,7 @@ class BinomialClassifier(pt.Model):
     }
     >>> outputs = cnn_gru(inputs)
     >>> outputs[0].shape
-    torch.Size([3, 10, 16])
+    torch.Size([3, 16, 16])
     """
 
     @classmethod
@@ -106,7 +96,7 @@ class BinomialClassifier(pt.Model):
             input_norm='l2_norm',
             recall_weight=1.,
             activation='sigmoid',
-            smooth_with_rnn=False,
+            segmented_rnn=False,
             window_length=50,
             window_shift=25
     ):
@@ -126,7 +116,7 @@ class BinomialClassifier(pt.Model):
         self.recall_weight = recall_weight
         self.activiation = pt.mappings.ACTIVATION_FN_MAP[activation]()
         self.norm = input_norm
-        self.smooth_with_rnn = smooth_with_rnn
+        self.segmented_rnn = segmented_rnn
         self.window_length = window_length
         self.window_shift = window_shift
 
@@ -152,7 +142,7 @@ class BinomialClassifier(pt.Model):
 
     def rnn(self, x, seq_len=None):
         if self._rnn is not None:
-            if self.smooth_with_rnn:
+            if self.segmented_rnn:
                 batch_size = x.shape[0]
                 x_list = self.segment(x)
                 x_list = rearrange(x_list, 'b f l t -> (b l) t f')
@@ -214,14 +204,12 @@ class BinomialClassifier(pt.Model):
             seq_len = outputs[1][idx]
             scores = self.maybe_pool(scores)
             scores = scores[..., :seq_len]
-            if self.smooth_with_rnn:
+            if self.segmented_rnn:
                 target = self.segment(target)
                 target = torch.max(target, dim=-1)[0]
 
             targets = target[..., :scores.shape[-1]]
             scores = scores[..., :targets.shape[-1]]
-            if self.weakly_supervised:
-                targets = self.auto_pooling(targets)
             assert targets.dim() == scores.dim(), (targets.shape, scores.shape)
             loss = -(
                     self.recall_weight * targets * torch.log(scores)
@@ -296,7 +284,7 @@ class BinomialClassifier(pt.Model):
 
     def get_per_frame_vad(self, model_out, threshold,
                           transform=None, segment_length=400):
-        if self.smooth_with_rnn:
+        if self.segmented_rnn:
             shift = self.window_shift
             slc = self.window_length - 1 - ((segment_length - 1) % shift)
             num_segments = math.ceil(segment_length / shift)
@@ -312,11 +300,6 @@ class BinomialClassifier(pt.Model):
             batch_size = model_out.shape[0]
             return smooth_vad(model_out.reshape(batch_size, -1).copy(),
                               threshold=threshold)
-
-    def auto_pooling(self, prob):
-        exp = torch.exp(self.temperature * prob)
-        exp_sum = exp / torch.sum(exp, dim=-1, keepdim=True)
-        return torch.sum(prob * exp_sum, dim=-1, keepdim=True)
 
 
 def smooth_vad(vad_pred, window=25, divisor=1, threshold=0.1):

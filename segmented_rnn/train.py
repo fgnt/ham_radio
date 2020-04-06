@@ -16,10 +16,10 @@ from padertorch.train.trainer import Trainer
 from sacred.utils import apply_backspaces_and_linefeeds
 from segmented_rnn import keys as K
 
-from .system.model import BinomialClassifier
-from .system.module import CNN1d, CNN2d
-from .system.provider import Transformer, RadioProvider, MelTransform
-from .system.utils import Pool1d
+from segmented_rnn.system.model import BinomialClassifier
+from segmented_rnn.system.module import CNN1d, CNN2d
+from segmented_rnn.system.provider import Transformer, RadioProvider, MelTransform
+from segmented_rnn.system.utils import Pool1d
 
 ex = sacred.Experiment('Train Voice Activity Detector')
 ex.captured_out_filter = apply_backspaces_and_linefeeds
@@ -28,30 +28,25 @@ ex.captured_out_filter = apply_backspaces_and_linefeeds
 def config():
     max_it = int(2e5)
     model_dir = Path(os.environ['MODEL_DIR'])
-    mel_features = 23
-    num_features = mel_features
-    cnn_2d_out = 64
     trainer_opts = deflatten({
         'model': {
             'factory': BinomialClassifier,
-            'label_key': 'presence',
             'cnn_2d': {
                 'factory': CNN2d,
                 'in_channels': 1,
-                'hidden_channels': (np.array([16, 16, 32, 32, 64, cnn_2d_out])).tolist(),
+                'hidden_channels': (np.array([16, 16, 32, 32, 64, 64])).tolist(),
                 'pool_size': [1, (4, 1), 1, (8, 1), 1, (8, 1)],
                 'num_layers': 6,
                 'out_channels': None,
                 'kernel_size': 3,
                 'norm': 'batch',
                 'activation': 'relu',
-                'gated': False,
                 'dropout': .0,
             },
             'cnn_1d': None,
             'pooling': {'factory': Pool1d, 'pooling':'max', 'pool_size': 10, 'padding': None},
             'recall_weight': 1.,
-            'norm': None
+            'input_norm': None
         },
         'optimizer.factory': Adam,
         'stop_trigger': (int(5e4), 'iteration'),
@@ -90,9 +85,6 @@ def config():
         sacred.observers.FileStorageObserver.create(storage_dir)
     trainer_opts['storage_dir'] = storage_dir
 
-    assert 'database' in provider_opts, provider_opts
-    assert 'factory' in provider_opts['database'], provider_opts
-
     trainer_opts = Trainer.get_config(
         trainer_opts
     )
@@ -119,27 +111,46 @@ def time_segments():
 
 
 @ex.named_config
-def rnn(trainer_opts, cnn_2d_out):
-    trainer_opts['model'] =  dict(model=dict(
+def rnn():
+    trainer_opts = dict(model=dict(
         rnn={
-            'input_size': cnn_2d_out,
-            'rnn.factory': 'torch.nn.GRU',
-            'rnn.hidden_size': 256,
-            'rnn.num_layers': 2,
-            'rnn.dropout': 0.5,
-            'rnn.bidirectional': True,
-            'rnn.batch_first': False,
+            'factory': 'torch.nn.GRU',
+            'input_size': 64,
+            'hidden_size': 256,
+            'num_layers': 2,
+            'dropout': 0.5,
+            'bidirectional': True,
+            'batch_first': False,
         },
         cnn_1d=None
     ))
 
 
 @ex.named_config
-def use_cnn1d(cnn_2d_out):
+def segmented_rnn():
     trainer_opts = dict(model=dict(
-        cnn_1d = {
+        rnn={
+            'factory': 'torch.nn.GRU',
+            'input_size': 64,
+            'hidden_size': 256,
+            'num_layers': 2,
+            'dropout': 0.5,
+            'bidirectional': True,
+            'batch_first': False,
+        },
+        segmented_rnn=True,
+        window_length=10,
+        window_shift=5,
+        cnn_1d=None
+    ))
+
+
+@ex.named_config
+def use_cnn1d():
+    trainer_opts = dict(model=dict(
+        cnn_1d={
             'factory': CNN1d,
-            'in_channels': cnn_2d_out,
+            'in_channels': 64,
             'hidden_channels': 128,
             'out_channels': 10,
             'num_layers': 2,
@@ -174,7 +185,7 @@ def fearless():
 def ham_radio():
     provider_opts = {
         'database': {
-            'factory': 'segmented_rnn.database.HamRadio',
+            'factory': 'segmented_rnn.database.HamRadioLibrispeech',
         }
     }
     database_name = 'ham_radio'
@@ -182,8 +193,8 @@ def ham_radio():
 
 @ex.capture
 def initialize_trainer_provider(task, trainer_opts, provider_opts, _run):
-
-
+    assert 'database' in provider_opts, provider_opts
+    assert 'factory' in provider_opts['database'], provider_opts
     storage_dir = Path(trainer_opts['storage_dir'])
     if (storage_dir / 'init.json').exists():
         assert task in ['restart', 'validate'], task

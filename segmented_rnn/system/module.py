@@ -9,8 +9,8 @@ from padertorch.ops.mappings import ACTIVATION_FN_MAP
 from padertorch.utils import to_list
 from torch import nn
 
-from .utils import Pool1d, Pool2d
-from .utils import to_pair, Pad, Cut
+from segmented_rnn.system.utils import Pool1d, Pool2d
+from segmented_rnn.system.utils import to_pair, Pad, Cut
 
 
 class _Conv(Module):
@@ -231,8 +231,6 @@ class _CNN(Module):
             x = conv(x, pool_indices[i], shapes[i])
             if isinstance(x, tuple):
                 x, pool_indices[i], shapes[i] = x
-        if self.return_pool_data:
-            return x, pool_indices, shapes
         return x
 
     def get_out_shape(self, in_shape):
