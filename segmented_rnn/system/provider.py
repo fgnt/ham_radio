@@ -22,7 +22,7 @@ class Transformer(Configurable):
     def finalize_dogmatic_config(cls, config):
         super().finalize_dogmatic_config(config)
         config['stft'] = dict(factory=STFT, size=256, shift=80,
-                              window_length=200)
+                              window_length=200, fading=False)
         if 'mel' in config.keys() and config['mel'] is not None:
             config['mel'] = dict(
                 factory=MelTransform, sample_rate=8000,
