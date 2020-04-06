@@ -46,18 +46,20 @@ class BinomialClassifier(pt.Model):
             'in_channels': 1,\
             'hidden_channels': 32,\
             'num_layers': 3,\
-            'out_channels': 16,\
+            'out_channels': 8,\
             'kernel_size': 3\
         }),\
         'rnn': torch.nn.GRU(**{\
-                'input_size':1024,\
+                'input_size':512,\
                 'hidden_size':256,\
                 'num_layers':2,\
                 'dropout':0.5,\
-                'bidirectional':True\
+                'bidirectional':True,\
+                'batch_first':False\
         }),\
         'pooling': Pool1d('max', 16),\
-        'segmented_rnn': True\
+        'segmented_rnn': True,\
+        'cnn_1d':None\
     })
     >>> inputs = {\
         'speech_features': torch.zeros(3, 1, 400, 64),\
@@ -66,25 +68,8 @@ class BinomialClassifier(pt.Model):
     }
     >>> outputs = cnn_gru(inputs)
     >>> outputs[0].shape
-    torch.Size([3, 16, 16])
+    torch.Size([3, 8, 16])
     """
-
-    @classmethod
-    def finalize_dogmatic_config(cls, config):
-        if 'rnn' in config.keys() and config['rnn'] is not None:
-            if 'cnn_1d' in config.keys():
-                assert config['cnn_1d'] is None, config
-            # we assume that the parameter out_channels was not used in cnn_2d
-            config['rnn'] = dict(
-                factory=torch.nn.GRU,
-                input_size=config['cnn_2d']['hidden_channels'][-1],
-                hidden_size=256,
-                num_layers=2,
-                dropout=0.5,
-                bidirectional=True,
-                batch_first=False
-            )
-        return config
 
     def __init__(
             self,
@@ -176,7 +161,7 @@ class BinomialClassifier(pt.Model):
                 raise NotImplementedError('Only the l2_norm is implemented at'
                                           'the moment', self.norm)
         seq_len = inputs['num_frames']
-        x = x.permute(0, 1, 3, 2)
+        x = rearrange(x, 'b c t f -> b c f t')
         x, seq_len = self.cnn_2d(x, seq_len)
 
         y, seq_len = self.rnn(x, seq_len)

@@ -139,8 +139,8 @@ def segmented_rnn():
             'batch_first': False,
         },
         segmented_rnn=True,
-        window_length=10,
-        window_shift=5,
+        window_length=50,
+        window_shift=25,
         cnn_1d=None
     ))
 
@@ -187,6 +187,9 @@ def ham_radio():
         'database': {
             'factory': 'segmented_rnn.database.HamRadioLibrispeech',
         }
+    }
+    trainer_opts = {
+        'model': {'input_norm': 'l2_norm'}
     }
     database_name = 'ham_radio'
 
