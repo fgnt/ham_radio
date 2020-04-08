@@ -50,10 +50,11 @@ def config():
             'input_norm': None
         },
         'optimizer.factory': Adam,
-        'stop_trigger': (int(5e4), 'iteration'),
+        'stop_trigger': (int(1e5), 'iteration'),
         'summary_trigger': (500, 'iteration'),
         'checkpoint_trigger': (500, 'iteration'),
         'storage_dir': None,
+        'virtual_minibatch_size': 1
     })
     stft_size = 256
     provider_opts = deflatten({
@@ -62,13 +63,14 @@ def config():
             'stft': dict(size=stft_size, shift=80, window_length=200),
             'mel': None
         },
-        'batch_size': 20,
+        'batch_size': 24,
         'audio_keys': [K.OBSERVATION],
         'collate': dict(
             sort_by_key=K.NUM_SAMPLES,
             padding=True,
             padding_keys=[K.SPEECH_FEATURES]
         ),
+        'time_segments': 32000,
     })
     database_name = None
     storage_dir = None
@@ -101,16 +103,6 @@ def config():
         early_stopping_patience=None
     )
 
-
-@ex.named_config
-def time_segments():
-    provider_opts = {'time_segments': 32000,
-                     'batch_size': 8
-                     }
-    trainer_opts = {'stop_trigger': (int(2e5), 'iteration'),
-                    'virtual_minibatch_size': 2}
-
-
 @ex.named_config
 def rnn():
     trainer_opts = dict(model=dict(
@@ -140,14 +132,14 @@ def segmented_rnn():
             'batch_first': False,
         },
         segmented_rnn=True,
-        window_length=50,
-        window_shift=25,
+        window_length=20,
+        window_shift=5,
         cnn_1d=None
     ))
 
 
 @ex.named_config
-def use_cnn1d():
+def cnn():
     trainer_opts = dict(model=dict(
         cnn_1d={
             'factory': CNN1d,
@@ -161,14 +153,6 @@ def use_cnn1d():
             'dropout': .0
         },
         rnn=None,
-    ))
-
-
-@ex.named_config
-def mel_features(stft_size):
-    provider_opts = dict(transform=dict(
-        factory=MelTransform, sample_rate=8000, fft_length=stft_size,
-        n_mels=mel_features, fmin=0, fmax=4000, log=False
     ))
 
 

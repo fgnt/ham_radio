@@ -5,13 +5,13 @@ import paderbox as pb
 from pathlib import Path
 from lazy_dataset.database import JsonDatabase
 
-JSON_PATH = Path(os.environ['JSON_PATH'])
+HAM_RADIO_JSON_PATH = Path(os.environ['HAM_RADIO_JSON_PATH'])
 
 
 class HamRadioLibrispeech(JsonDatabase):
     def __init__(
             self,
-            json_path: [str, Path] = JSON_PATH / 'ham_radio.json',
+            json_path: [str, Path] = HAM_RADIO_JSON_PATH,
     ):
         super().__init__(json_path)
 
