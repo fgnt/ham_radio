@@ -10,10 +10,11 @@ import padertorch as pt
 from paderbox.array import segment_axis
 from paderbox.transform import STFT
 from paderbox.transform.module_fbank import MelTransform
-from paderbox.transform.module_filter import preemphasis_with_offset_compensation
+from paderbox.transform.module_filter import \
+    preemphasis_with_offset_compensation
 from padertorch.base import Configurable
 from segmented_rnn import keys as K
-from .utils import Padder
+from segmented_rnn.system.utils import Padder
 
 
 class Transformer(Configurable):
@@ -208,34 +209,22 @@ class RadioProvider(Configurable):
         else:
             out_dict[K.NUM_SAMPLES] = example[K.NUM_SAMPLES]
 
-        if 'speech_annotation' in example:
+        if K.SPEECH_ANNOTATION in example:
             out_dict[K.TARGET_TIME_VAD] = jsonpickle.loads(
-                example['speech_annotation'])[:]
-        elif 'alignment_activity' in example:
-            out_dict[K.TARGET_TIME_VAD] = jsonpickle.loads(
-                example['alignment_activity'])[:]
+                example[K.SPEECH_ANNOTATION])[:]
         out_dict['audio_keys'].append(K.TARGET_TIME_VAD)
         return out_dict
 
     def read_audio(self, example):
         """Function to be mapped on an iterator."""
-        if self.database.__class__.__name__ == 'Fearless':
-            if 'start' in example and 'end' in example:
-                example[K.AUDIO_DATA] = {
-                    key: pb.io.load_audio(
-                        example[K.AUDIO_PATH][key], start=example['start'],
-                        frames=example[K.NUM_SAMPLES]
-                    )
-                    for key in self.audio_keys
-                }
-            else:
-                example[K.AUDIO_DATA] = {
-                    key: pb.io.load_audio(
-                        example[K.AUDIO_PATH][key],
-                        frames=4 * 8000, start=example['first_speech']
-                    )
-                    for key in self.audio_keys
-                }
+        if K.START in example and K.END in example:
+            example[K.AUDIO_DATA] = {
+                key: pb.io.load_audio(
+                    example[K.AUDIO_PATH][key], start=example['start'],
+                    frames=example[K.NUM_SAMPLES]
+                )
+                for key in self.audio_keys
+            }
         else:
             example[K.AUDIO_DATA] = {
                 key: pb.io.load_audio(example[K.AUDIO_PATH][key])

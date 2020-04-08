@@ -2,15 +2,16 @@ import os
 
 import numpy as np
 import paderbox as pb
+from pathlib import Path
 from lazy_dataset.database import JsonDatabase
 
-HAM_JSON_PATH = '/scratch/hpc-prf-nt1/jensheit/jsons/ham_radio_new.json' #os.environ['HAM_JSON_PATH']
+JSON_PATH = Path(os.environ['JSON_PATH'])
 
 
 class HamRadioLibrispeech(JsonDatabase):
     def __init__(
             self,
-            json_path=HAM_JSON_PATH,
+            json_path: [str, Path] = JSON_PATH / 'ham_radio.json',
     ):
         super().__init__(json_path)
 
