@@ -1,13 +1,12 @@
 import dlp_mpi
 import sacred
 import torch
-from paderbox.array import segment_axis
 import numpy as np
 from pathlib import Path
-from paderbox.io import load_json
-
+import paderbox as pb
+import jsonpickle
 import padertorch as pt
-from segmented_rnn.system.provider import RadioProvider, Transformer
+from segmented_rnn.system.data import RadioProvider
 from segmented_rnn.system.model import BinomialClassifier
 
 ex = sacred.Experiment('Test Plath')
@@ -18,8 +17,8 @@ def config():
     model_dir = None
     num_ths = 201
     dataset = 'test'
-    checkpoint='ckpt_best_loss.pth'
-    segments=400
+    ckpt = 'ckpt_best_loss.pth'
+    segments = 400
     buffer = 1
     out_dir = None
 
@@ -30,7 +29,7 @@ def adjust_annotation_fn(annotation, sample_rate, buffer_zone=1):
     Args:
         annotation:
         sample_rate:
-        buffer_zone:
+        buffer_zone: num secs around speech activity which are not scored
 
     Returns:
     >>> annotation = np.array([0, 1, 1, 1, 0, 0, 0, 1])
@@ -59,8 +58,7 @@ def adjust_annotation_fn(annotation, sample_rate, buffer_zone=1):
 
 
 def get_tp_fp_tn_fn(
-        annotation, vad, sample_rate=8000, adjust_annotation=True,
-        ignore_buffer=False
+        annotation, vad, sample_rate=8000, adjust_annotation=True
 ):
     """
     >>> annotation = np.array([0, 1, 1, 1, 0, 0, 0, 1])
@@ -110,15 +108,12 @@ def get_tp_fp_tn_fn(
     tp = result[result == 11].shape[0]
     fp = result[result == 10].shape[0]
     tn = result[result == 0].shape[0]
-    if not ignore_buffer:
-        tn += result[result == 5].shape[0]
     fn = result[result == 1].shape[0]
     return tp, fp, tn, fn
 
 
 @ex.automain
-def main(model_dir, num_ths, dataset,
-         buffer, out_dir, checkpoint, segments):
+def main(model_dir, num_ths, dataset, buffer, out_dir, checkpoint, segments):
     model_dir = Path(model_dir).expanduser().resolve()
     model_cls = BinomialClassifier
     model = model_cls.from_config_and_checkpoint(
@@ -128,47 +123,41 @@ def main(model_dir, num_ths, dataset,
         in_checkpoint_path='model',
     )
 
-    provider_opts = load_json(model_dir / 'init.json')['provider_opts']
-    provider_opts['database'][
-        'factory'] = 'segmented_rnn.database.HamRadioLibrispeech'
-    provider_opts['transform']['factory'] = Transformer
+    provider_opts = pb.io.load_json(model_dir / 'init.json')['provider_opts']
     provider = RadioProvider.from_config(provider_opts)
-    provider.batch_size_eval = 1
-    ds = provider.get_predict_iterator(dataset=dataset)
-    model.eval()
+    transform = provider.transform
+    padder = provider.collate
 
     tp_fp_tn_fn = np.zeros((num_ths, 4), dtype=int)
-    for ex_eval in dlp_mpi.split_managed(
-            ds,
+    for example in dlp_mpi.split_managed(
+            provider.database.get_dataset(dataset),
             is_indexable=True,
             allow_single_worker=True,
             progress_bar=True
     ):
-        ex_eval['speech_features'] = segment_axis(
-            ex_eval['speech_features'], segments, shift=segments, axis=-2
-        ).reshape(-1, 1, 400, ex_eval['speech_features'].shape[-1])
+        torch_example = transform.audio_to_input_dict(
+            audio=provider.read_audio(example)['audio_data']['observation'],
+            segments=segments, padder=padder
+        )
+        segmented_model_out = model(torch_example)
+        segmented_model_out = torch.max(
+            segmented_model_out[0], dim=1)[0].detach().numpy()
 
-        ex_eval_torch = pt.data.example_to_device(ex_eval)
-        model_out_freq = model(ex_eval_torch)
-        model_out_freq = torch.max(
-            model_out_freq[0], dim=1)[0].detach().numpy()
-
-        ex_vad = ex_eval['target_vad'][0][0]
-        ali = provider.transform.activity_frequency_to_time(
-            ex_vad, 400, 160)
-        ali = adjust_annotation_fn(ali, sample_rate, buffer_zone=buffer)
+        annotation = jsonpickle.loads(example['speech_annotation'])[:]
+        annotation = adjust_annotation_fn(
+            annotation, sample_rate, buffer_zone=buffer)
         for idx, th in enumerate(np.linspace(0, 1, num_ths)):
             th = np.round(th, 2)
             model_out = model.get_per_frame_vad(
-                model_out_freq.copy(), th, provider.transform,
+                segmented_model_out.copy(), th, provider.transform,
                 segment_length=segments
             ).reshape(-1)
             vad = provider.transform.activity_frequency_to_time(
-                model_out, 400, 160)
-            num_samples = min(ali.shape[-1], vad.shape[-1])
+                model_out, transform.stft.window_length, transform.stft.shift)
+            num_samples = min(annotation.shape[-1], vad.shape[-1])
             out = get_tp_fp_tn_fn(
-                ali[:num_samples], vad[:num_samples], sample_rate=8000,
-                adjust_annotation=False
+                annotation[:num_samples], vad[:num_samples],
+                sample_rate=sample_rate, adjust_annotation=False
             )
             tp_fp_tn_fn[idx] = [tp_fp_tn_fn[idx][idy] + o for idy, o in
                                 enumerate(out)]
@@ -185,10 +174,7 @@ def main(model_dir, num_ths, dataset,
         for array in tp_fp_tn_fn_gather:
             tp_fp_tn_fn += array
 
-        if not dataset == 'test':
-            sub = '_' + '_'.join(pt.utils.to_list(dataset))
-        else:
-            sub = ''
-        (out_dir / f'tp_fp_tn_fn_{sub}.txt').write_text('\n'.join([
+        dset_name = '_' + '_'.join(pt.utils.to_list(dataset))
+        (out_dir / f'tp_fp_tn_fn_{dset_name}.txt').write_text('\n'.join([
             ' '.join([str(v) for v in value]) for value in tp_fp_tn_fn.tolist()
         ]))
