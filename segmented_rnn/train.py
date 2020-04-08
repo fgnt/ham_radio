@@ -18,7 +18,7 @@ from segmented_rnn import keys as K
 
 from segmented_rnn.system.model import BinomialClassifier
 from segmented_rnn.system.module import CNN1d, CNN2d
-from segmented_rnn.system.provider import Transformer, RadioProvider, MelTransform
+from segmented_rnn.system.data import Transformer, RadioProvider, MelTransform
 from segmented_rnn.system.utils import Pool1d
 
 ex = sacred.Experiment('Train Voice Activity Detector')
@@ -44,7 +44,8 @@ def config():
                 'dropout': .0,
             },
             'cnn_1d': None,
-            'pooling': {'factory': Pool1d, 'pooling':'max', 'pool_size': 10, 'padding': None},
+            'pooling': {'factory': Pool1d, 'pooling':'max', 'pool_size': 10,
+                        'padding': None},
             'recall_weight': 1.,
             'input_norm': None
         },

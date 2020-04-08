@@ -74,9 +74,9 @@ class BinomialClassifier(pt.Model):
     def __init__(
             self,
             cnn_2d: CNN2d,
+            pooling: Pool1d,
             cnn_1d: CNN1d = None,
             rnn: torch.nn.GRU = None,
-            pooling=None,
             *,
             input_norm='l2_norm',
             recall_weight=1.,
@@ -93,7 +93,7 @@ class BinomialClassifier(pt.Model):
             self.rnn_dnn = pt.modules.fully_connected_stack(
                 input_size=rnn.hidden_size * 2,
                 hidden_size=None,
-                output_size=cnn_2d.out_channels,
+                output_size=pooling.pool_size,
                 activation='relu',
                 dropout=0.5
             )
