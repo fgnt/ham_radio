@@ -70,14 +70,14 @@ setup(
     # https://packaging.python.org/en/latest/requirements.html
     extra_require={
         'all': [
-            'numpy==1.18.1',
-            'Cython==0.29.14',
-            'paderbox @ https://github.com/fgnt/paderbox/tarball/7b3b4e9d00e07664596108f987292b8c78d846b1#egg',
-            'padertorch @ https://github.com/fgnt/padertorch/tarball/3d0355edc9e3d7cdbcccb80e85107c5d78a47ccb#egg',
-            'torch==1.4.0',
-            'sacred==0.8.1',
-            'lazy_dataset==0.0.9',
-            'jsonpickle==1.2',
+            'numpy',
+            'Cython',
+            'torch',
+            'sacred',
+            'lazy_dataset',
+            'jsonpickle',
+            'paderbox @ https://github.com/fgnt/paderbox',
+            'padertorch @ https://github.com/fgnt/padertorch',
         ]
     },
 

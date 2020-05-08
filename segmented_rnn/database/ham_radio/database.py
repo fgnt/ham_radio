@@ -5,13 +5,14 @@ import paderbox as pb
 from pathlib import Path
 from lazy_dataset.database import JsonDatabase
 
-HAM_RADIO_JSON_PATH = Path(os.environ['HAM_RADIO_JSON_PATH'])
-
+if 'HAM_RADIO_JSON_PATH' in os.environ:
+    HAM_RADIO_JSON_PATH = Path(os.environ['HAM_RADIO_JSON_PATH'])
+else:
+    HAM_RADIO_JSON_PATH = None
 
 class HamRadioLibrispeech(JsonDatabase):
     def __init__(
-            self,
-            json_path: [str, Path] = HAM_RADIO_JSON_PATH,
+            self, json_path: [str, Path] = HAM_RADIO_JSON_PATH,
     ):
         super().__init__(json_path)
 
@@ -40,7 +41,7 @@ class HamRadioLibrispeech(JsonDatabase):
         return self.get_dataset(['train'])
 
     def get_dataset_validation(self):
-        return self.get_dataset(['validation'])
+        return self.get_dataset(['dev'])
 
     def get_dataset_test(self):
         return self.get_dataset(['test'])

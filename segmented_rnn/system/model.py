@@ -57,7 +57,7 @@ class BinomialClassifier(pt.Model):
                 'bidirectional':True,\
                 'batch_first':False\
         }),\
-        'pooling': Pool1d('max', 16),\
+        'pooling': Pool1d('max', 10),\
         'segmented_rnn': True,\
         'cnn_1d':None\
     })
@@ -68,7 +68,35 @@ class BinomialClassifier(pt.Model):
     }
     >>> outputs = cnn_gru(inputs)
     >>> outputs[0].shape
-    torch.Size([3, 8, 16])
+    torch.Size([3, 10, 16])
+
+     >>> cnn_gru = BinomialClassifier(**{\
+        'cnn_2d': CNN2d(**{\
+            'in_channels': 1,\
+            'hidden_channels': 32,\
+            'num_layers': 3,\
+            'out_channels': 8,\
+            'kernel_size': 3\
+        }),\
+        'rnn': torch.nn.GRU(**{\
+                'input_size':512,\
+                'hidden_size':256,\
+                'num_layers':2,\
+                'dropout':0.5,\
+                'bidirectional':True,\
+                'batch_first':False\
+        }),\
+        'pooling': Pool1d('max', 10),\
+        'cnn_1d':None\
+    })
+    >>> inputs = {\
+        'speech_features': torch.zeros(3, 1, 400, 64),\
+        'target_vad': torch.zeros(3, 1, 400),\
+        'num_frames': [500]*3\
+    }
+    >>> outputs = cnn_gru(inputs)
+    >>> outputs[0].shape
+    torch.Size([3, 10, 400])
     """
 
     def __init__(
@@ -172,7 +200,8 @@ class BinomialClassifier(pt.Model):
 
     def maybe_pool(self, scores):
         if self.pooling is not None:
-            scores, _ = self.pooling(scores.permute(0, 2, 1))
+            scores, _ = torch.max(
+                scores.permute(0, 2, 1), keepdim=True, dim=-1)
             scores = scores[..., 0]
         else:
             scores = scores

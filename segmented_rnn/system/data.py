@@ -176,12 +176,12 @@ class RadioProvider(Configurable):
             audio_keys: tuple = (K.OBSERVATION,),
             shuffle: bool = True,
             batch_size: int = 1,
-            batch_size_eval: int = 5,
+            batch_size_eval: int = None,
             num_workers: int = 4,
             buffer_size: int = 20,
             backend: str = 't',
             drop_last: bool = False,
-            time_segments: int = None,
+            time_segments: int = 32000,
             sample_rate: int = 8000
     ):
         self.database = database
@@ -209,9 +209,12 @@ class RadioProvider(Configurable):
         else:
             out_dict[K.NUM_SAMPLES] = example[K.NUM_SAMPLES]
 
-        if K.SPEECH_ANNOTATION in example:
+        if K.ALIGNMENT_ACTIVITY in example:
             out_dict[K.TARGET_TIME_VAD] = jsonpickle.loads(
-                example[K.SPEECH_ANNOTATION])[:]
+                example[K.ALIGNMENT_ACTIVITY])[:]
+        elif K.ACTIVTY:
+            out_dict[K.TARGET_TIME_VAD] = jsonpickle.loads(
+                example[K.ACTIVTY])[:]
         out_dict['audio_keys'].append(K.TARGET_TIME_VAD)
         return out_dict
 
@@ -318,3 +321,32 @@ class RadioProvider(Configurable):
         if filter_fn is not None:
             iterator = iterator.filter(filter_fn)
         return iterator
+
+
+class KFoldProvider(RadioProvider):
+    def __init__(
+            self,
+            database,
+            transform,
+            collate,
+            audio_keys: tuple = (K.OBSERVATION,),
+            shuffle: bool = True,
+            batch_size: int = 1,
+            batch_size_eval: int = None,
+            num_workers: int = 4,
+            buffer_size: int = 20,
+            backend: str = 't',
+            drop_last: bool = False,
+            time_segments: int = 32000,
+            sample_rate: int = 8000,
+            k_folds: int = 10,
+    ):
+        super().__init__(
+            database=database, transform=transform, collate=collate,
+            audio_keys=audio_keys, shuffle=shuffle,
+            batch_size=batch_size, batch_size_eval=batch_size_eval,
+            num_workers=num_workers, buffer_size=buffer_size,
+            backend=backend, drop_last=drop_last,
+            time_segments=time_segments, sample_rate=sample_rate
+        )
+        self.k_folds = k_folds

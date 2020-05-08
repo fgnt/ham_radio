@@ -8,6 +8,7 @@ import jsonpickle
 import padertorch as pt
 from segmented_rnn.system.data import RadioProvider
 from segmented_rnn.system.model import BinomialClassifier
+import segmented_rnn.keys as K
 
 ex = sacred.Experiment('Test Plath')
 sample_rate = 8000
@@ -17,7 +18,7 @@ def config():
     model_dir = None
     num_ths = 201
     dataset = 'test'
-    ckpt = 'ckpt_best_loss.pth'
+    checkpoint = 'ckpt_best_loss.pth'
     segments = 400
     buffer = 1
     out_dir = None
@@ -136,14 +137,14 @@ def main(model_dir, num_ths, dataset, buffer, out_dir, checkpoint, segments):
             progress_bar=True
     ):
         torch_example = transform.audio_to_input_dict(
-            audio=provider.read_audio(example)['audio_data']['observation'],
+            audio=provider.read_audio(example)[K.AUDIO_DATA][K.OBSERVATION],
             segments=segments, padder=padder
         )
         segmented_model_out = model(torch_example)
         segmented_model_out = torch.max(
             segmented_model_out[0], dim=1)[0].detach().numpy()
 
-        annotation = jsonpickle.loads(example['speech_annotation'])[:]
+        annotation = jsonpickle.loads(example[K.ALIGNMENT_ACTIVITY])[:]
         annotation = adjust_annotation_fn(
             annotation, sample_rate, buffer_zone=buffer)
         for idx, th in enumerate(np.linspace(0, 1, num_ths)):

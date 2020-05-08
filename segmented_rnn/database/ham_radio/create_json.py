@@ -1,15 +1,15 @@
 import click
-import lazy_dataset
 import jsonpickle
 import numpy as np
 import paderbox as pb
+from pathlib import Path
 
-from paderbox.array.intervall import ArrayIntervall
+from paderbox.utils.mapping import Dispatcher
 
 from segmented_rnn import keys as K
 from segmented_rnn.database.utils import click_common_options
-from segmented_rnn.database.utils import click_convert_to_path
 from segmented_rnn.database.utils import dump_database_as_json
+from segmented_rnn.database.utils import check_audio_files_exist
 
 class HamRadioLibrispeechKeys:
     NOISE = 'noise'
@@ -17,93 +17,85 @@ class HamRadioLibrispeechKeys:
     LIBRISPEECH_ID = 'librispeech_id'
 
 
+dset2id_mapping = Dispatcher(
+    train=(0, 140),
+    dev=(176, 190),
+    eval=(141, 175)
+)
+
 SAMPLE_RATE = 16000
 HRL_K = HamRadioLibrispeechKeys
 
 
-def get_example(audio, org_json):
+def get_example(audio: Path, org_json, transcription_json, dset_name):
     station, _id = audio.stem.split('__')
-    ex = org_json[_id].copy()
     num_samples = pb.io.audioread.audio_length(audio)
-    ex['silence_length'][0] += SAMPLE_RATE * 5
-    ex['silence_length'][-1] += SAMPLE_RATE
-    ex['silence_length'] = [l // 2 for l in ex['silence_length']]
-    ex['speech_length'] = [l // 2 for l in ex['speech_length']]
-    activity = jsonpickle.loads(ex['activity'])[:]
-    activity_time = np.concatenate([
-        np.zeros(SAMPLE_RATE * 5, activity.dtype),
-        activity,
-        np.zeros(SAMPLE_RATE, activity.dtype)
-    ], axis=0)[::2]
-    assert np.isclose(np.sum(activity) / 2, np.sum(activity_time), 0.1), (
-    sum(activity) / 2, sum(activity_time))
-    assert np.isclose(activity_time.shape[-1], num_samples, 0.1), (
-    activity_time.shape, num_samples)
-    ex['activity'] = jsonpickle.dumps(ArrayIntervall(
-        activity_time))
-    activity = jsonpickle.loads(ex['alignment_activity'])[:]
-    activity_freq = np.concatenate([
-        np.zeros(SAMPLE_RATE * 5, activity.dtype),
-        activity,
-        np.zeros(SAMPLE_RATE, activity.dtype)
-    ], axis=0)[::2]
-    assert np.isclose(np.sum(activity) // 2, np.sum(activity_freq), 0.1), (
-    sum(activity) // 2, sum(activity_freq))
-    assert np.isclose(activity_freq.shape[-1], num_samples, 1e-1), (
-    activity_freq.shape, num_samples)
-    ex['speech_annotation'] = jsonpickle.dumps(
-        ArrayIntervall(activity_freq))
-    assert np.isclose(np.sum(ex['speech_length']), np.sum(activity_time), 0.1), (
-    sum(ex['speech_length']), sum(activity_time))
+
+    ex = org_json[_id].copy()
+    activity = jsonpickle.loads(ex[K.ACTIVTY])[:]
+    assert np.isclose(activity.shape[-1], num_samples, 0.1), (
+        activity.shape, num_samples)
+
+    activity = jsonpickle.loads(ex[K.ALIGNMENT_ACTIVITY])[:]
+    assert activity.shape[-1] == num_samples, (activity.shape, num_samples)
+    # assert np.isclose(np.sum(ex['speech_length']), np.sum(activity), 0.1), (
+    #     sum(ex['speech_length']), sum(activity))
+    org_json[HRL_K.STATION] = station
+    if int(_id) == 180:
+        if audio.parent.name == '19_12_10_14_39_04__176_180':
+            station += '_0'
+        elif audio.parent.name == '19_12_10_14_56_58__180_185':
+            station += '_1'
+        else:
+            raise ValueError()
+    indices = np.where(activity[:-1] != activity[1:])[0]
+    indices = np.concatenate([[0], indices, [len(activity)]], axis=0)
+    first_value = activity[0]
+    assert first_value == 0
+    clean_dir = audio.parents[3] / 'clean' / dset_name
     audio_dict = {
-        K.SPEECH_SOURCE: ex[K.AUDIO_PATH][K.OBSERVATION],
+        K.SPEECH_SOURCE: clean_dir / f'clean_{_id}.wav',
         K.OBSERVATION: str(audio),
     }
+
     ex_id = station + '_' + _id
-    ex[K.NUM_SAMPLES] = num_samples
+
     ex[K.AUDIO_PATH] = audio_dict
-    ex[HRL_K.STATION] = station
-    ex[K.EXAMPLE_ID] = ex_id
+    ex[K.ORIGINAL_TRANSCRIPTION] = ex['transcriptions']
+    ex[K.TRANSCRIPTION] = transcription_json[_id]
     return ex_id, ex
 
 
-def create_database(database_path, origin_path):
-    org_json = pb.io.load_json(origin_path / 'information.json')
-    db = {K.DATASETS: {
-        'train':{}, 'validation': {}, 'test': {}, 'test_evening':{}}
-    }
-    for dirs in database_path.glob('*'):
-        ex_dict = dict()
-        for audio in dirs.glob('*.wav'):
-            ex_id, ex = get_example(audio, org_json)
-            ex_dict[ex_id] = ex
-        if dirs.name.split('__')[1] == '141_145':
-            db[K.DATASETS]['validation'].update(ex_dict)
-            print('validation', dirs)
-        elif 146 <= int(dirs.name.split('__')[1].split('_')[0]) < 180:
-            db[K.DATASETS]['test'].update(ex_dict)
-            print('test', dirs)
-            db[K.DATASETS]['test'].update(ex_dict)
-            print('test', dirs)
-        else:
-            db[K.DATASETS]['train'].update(ex_dict)
-            print('train', dirs)
-    lazy_ds = lazy_dataset.from_dict(db[K.DATASETS]['train'])
-    assert len(lazy_ds) == len(set(lazy_ds.keys()))
+def create_database(database_path):
+    orig_json = pb.io.load_json(database_path / 'annotations.json')
+    transcription_json = pb.io.load_json(database_path / 'transcription.json')
+    db = {K.DATASETS: {}, K.ALIAS: {}}
+    for dset in (database_path / 'noisy').glob('*'):
+        dset_name = dset.name
+        id_min, id_max = dset2id_mapping[dset_name]
+        for dirs in dset.glob('*'):
+            ex_dict = dict()
+            for audio in dirs.glob('*.wav'):
+                key, ex = get_example(audio, orig_json, transcription_json,
+                                      dset_name)
+                ex_dict[key] = ex
+                ids = dirs.name.split('__')[1].split('_')
+                assert id_min <= int(ids[0]) < id_max, (dirs.name, dset_name)
+                assert id_min < int(ids[1]) <= id_max, (dirs.name, dset_name)
+                db[K.DATASETS][f'{dset_name}_{"_".join(ids)}'] = ex_dict
+        db[K.ALIAS].update({dset_name: [key for key in db[K.DATASETS].keys()
+                                   if dset_name in key]})
+        print(dset_name, 'includes the following ids', db[K.ALIAS][dset_name])
     return db
 
 
 @click.command()
 @click_common_options('ham_radio.json', '/net/vol/ham/Cut')
-@click.option(
-    '--origin-path', default='/net/vol/jensheit/plath/data/clean_evaluation',
-    help=f'Path with clean librispeech combinations.',
-    type=click.Path(exists=True, dir_okay=True, writable=False),
-    callback=click_convert_to_path,
-)
-
-def main(database_path, json_path, origin_path):
-    json = create_database(database_path, origin_path)
+def main(database_path, json_path):
+    json = create_database(database_path)
+    print("Check that all wav files in the json exist.")
+    check_audio_files_exist(json, speedup="thread")
+    print("Finished check.")
     dump_database_as_json(json_path, json)
 
 

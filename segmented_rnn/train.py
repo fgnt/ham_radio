@@ -18,7 +18,7 @@ from segmented_rnn import keys as K
 
 from segmented_rnn.system.model import BinomialClassifier
 from segmented_rnn.system.module import CNN1d, CNN2d
-from segmented_rnn.system.data import Transformer, RadioProvider, MelTransform
+from segmented_rnn.system.data import Transformer, RadioProvider
 from segmented_rnn.system.utils import Pool1d
 
 ex = sacred.Experiment('Train Voice Activity Detector')
@@ -64,6 +64,8 @@ def config():
             'mel': None
         },
         'batch_size': 24,
+        'batch_size_eval': 1,
+        'buffer_size': 10,
         'audio_keys': [K.OBSERVATION],
         'collate': dict(
             sort_by_key=K.NUM_SAMPLES,
@@ -117,10 +119,11 @@ def rnn():
         },
         cnn_1d=None
     ))
+    add_name = 'rnn'
 
 
 @ex.named_config
-def segmented_rnn():
+def segment_rnn():
     trainer_opts = dict(model=dict(
         rnn={
             'factory': 'torch.nn.GRU',
@@ -136,6 +139,7 @@ def segmented_rnn():
         window_shift=5,
         cnn_1d=None
     ))
+    add_name = 'segmented_rnn'
 
 
 @ex.named_config
