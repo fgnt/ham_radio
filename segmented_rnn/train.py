@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import sacred
+from copy import deepcopy
 from paderbox.io import dump_json
 from paderbox.utils.nested import deflatten
 from padertorch.configurable import config_to_instance
@@ -83,7 +84,7 @@ def config():
         ex_name = f'{model_name.split(".")[-1]}'
         if add_name is not None:
             ex_name += f'_{add_name}'
-        observer = sacred.observers.FileStorageObserver.create(
+        observer = sacred.observers.FileStorageObserver(
             str(model_dir / database_name / ex_name))
         storage_dir = observer.basedir
     else:
@@ -135,8 +136,8 @@ def segment_rnn():
             'batch_first': False,
         },
         segmented_rnn=True,
-        window_length=20,
-        window_shift=5,
+        window_length=50,
+        window_shift=25,
         cnn_1d=None
     ))
     add_name = 'segmented_rnn'
@@ -168,7 +169,9 @@ def fearless():
         }
     }
     database_name = 'fearless'
-
+    trainer_opts = {
+            'model': {'input_norm': None}
+        }
 
 @ex.named_config
 def ham_radio():
@@ -188,6 +191,8 @@ def initialize_trainer_provider(task, trainer_opts, provider_opts, _run):
     assert 'database' in provider_opts, provider_opts
     assert 'factory' in provider_opts['database'], provider_opts
     storage_dir = Path(trainer_opts['storage_dir'])
+    trainer_opts = deepcopy(trainer_opts)
+    provider_opts = deepcopy(provider_opts)
     if (storage_dir / 'init.json').exists():
         assert task in ['restart', 'validate'], task
     elif task in ['train', 'create_checkpoint']:
@@ -196,7 +201,9 @@ def initialize_trainer_provider(task, trainer_opts, provider_opts, _run):
                   storage_dir / 'init.json')
     else:
         raise ValueError(task, storage_dir)
-    sacred.commands.print_config(_run)
+    from paderbox.utils.pretty import pprint
+    pprint('provider_opts:', provider_opts)
+    pprint('trainer_opts:', trainer_opts)
     trainer = Trainer.from_config(trainer_opts)
     assert isinstance(trainer, Trainer)
     provider = config_to_instance(provider_opts)
