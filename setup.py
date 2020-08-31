@@ -68,7 +68,7 @@ setup(
     # your project is installed. For an analysis of "install_requires" vs pip's
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
-    extra_require={
+    extras_require={
         'all': [
             'numpy',
             'Cython',
@@ -76,8 +76,8 @@ setup(
             'sacred',
             'lazy_dataset',
             'jsonpickle',
-            'paderbox @ https://github.com/fgnt/paderbox',
-            'padertorch @ https://github.com/fgnt/padertorch',
+            'paderbox @ git+http://github.com/fgnt/paderbox',
+            'padertorch @ git+https://github.com/fgnt/padertorch',
         ]
     },
 
