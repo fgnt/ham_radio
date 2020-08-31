@@ -28,6 +28,9 @@ class HamRadioLibrispeech(JsonDatabase):
 
             if sample_rate == 8000:
                 return x
+            if sample_rate == 16000:
+                return pb.transform.resample_sox(
+                    x, in_rate=sample_rate, out_rate=8000)
             else:
                 raise RuntimeError(
                     f'Unexpected file found: {x}\n'
@@ -44,7 +47,7 @@ class HamRadioLibrispeech(JsonDatabase):
         return self.get_dataset(['dev'])
 
     def get_dataset_test(self):
-        return self.get_dataset(['test'])
+        return self.get_dataset(['eval'])
 
     def add_num_samples(self, example):
         if isinstance(example['num_samples'], dict):

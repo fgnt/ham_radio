@@ -41,7 +41,7 @@ class BinomialClassifier(pt.Model):
     torch.Size([4, 10, 100])
     >>> review = cnn.review(inputs, outputs)
 
-    >>> cnn_gru = BinomialClassifier(**{\
+    >>> segmented_rnn = BinomialClassifier(**{\
         'cnn_2d': CNN2d(**{\
             'in_channels': 1,\
             'hidden_channels': 32,\
@@ -66,11 +66,11 @@ class BinomialClassifier(pt.Model):
         'target_vad': torch.zeros(3, 1, 400),\
         'num_frames': [500]*3\
     }
-    >>> outputs = cnn_gru(inputs)
+    >>> outputs = segmented_rnn(inputs)
     >>> outputs[0].shape
     torch.Size([3, 10, 16])
 
-     >>> cnn_gru = BinomialClassifier(**{\
+     >>> rnn = BinomialClassifier(**{\
         'cnn_2d': CNN2d(**{\
             'in_channels': 1,\
             'hidden_channels': 32,\
@@ -94,7 +94,7 @@ class BinomialClassifier(pt.Model):
         'target_vad': torch.zeros(3, 1, 400),\
         'num_frames': [500]*3\
     }
-    >>> outputs = cnn_gru(inputs)
+    >>> outputs = rnn(inputs)
     >>> outputs[0].shape
     torch.Size([3, 10, 400])
     """

@@ -1,10 +1,14 @@
 import collections
 from copy import deepcopy
 from functools import partial
+from pathlib import Path
+from hashlib import md5
 from random import shuffle as shuffle_fn
 
 import jsonpickle
 import numpy as np
+
+from lazy_dataset.core import FilterException
 import paderbox as pb
 import padertorch as pt
 from paderbox.array import segment_axis
@@ -182,7 +186,8 @@ class RadioProvider(Configurable):
             backend: str = 't',
             drop_last: bool = False,
             time_segments: int = 32000,
-            sample_rate: int = 8000
+            sample_rate: int = 8000,
+            min_speech_activity: int = 0,
     ):
         self.database = database
         self.transform = transform if transform is not None else lambda x: x
@@ -197,6 +202,14 @@ class RadioProvider(Configurable):
         self.drop_last = drop_last
         self.time_segments = time_segments
         self.sample_rate = sample_rate
+        self.min_speech_activity = min_speech_activity
+
+    @staticmethod
+    def _example_id_to_rng(example_id):
+        hash_value = md5(example_id.encode())
+        hash_value = int(hash_value.hexdigest(), 16)
+        hash_value = hash_value % 2 ** 32 - 1
+        return np.random.RandomState(hash_value)
 
     def to_dict_structure(self, example):
         """Function to be mapped on an iterator."""
@@ -212,10 +225,22 @@ class RadioProvider(Configurable):
         if K.ALIGNMENT_ACTIVITY in example:
             out_dict[K.TARGET_TIME_VAD] = jsonpickle.loads(
                 example[K.ALIGNMENT_ACTIVITY])[:]
-        elif K.ACTIVTY:
+        elif K.ACTIVITY:
             out_dict[K.TARGET_TIME_VAD] = jsonpickle.loads(
-                example[K.ACTIVTY])[:]
+                example[K.ACTIVITY])[:]
         out_dict['audio_keys'].append(K.TARGET_TIME_VAD)
+        if K.TARGET_SHIFT in example:
+            out_dict[K.TARGET_SHIFT]= example[K.TARGET_SHIFT]
+        else:
+            out_dict[K.TARGET_SHIFT] = 0
+        if 'snr' in example:
+            out_dict['snr'] = example['snr']
+        else:
+            out_dict['snr'] = 'unknown'
+        if 'band' in example:
+            out_dict['band'] = example['band']
+        else:
+            out_dict['band'] = 'unknown'
         return out_dict
 
     def read_audio(self, example):
@@ -248,7 +273,6 @@ class RadioProvider(Configurable):
             audio_keys[idx]: leng for idx, leng in enumerate(lengths)}
         length = lengths[0]
         if length == 0:
-            from lazy_dataset.core import FilterException
             print('was to short')
             raise FilterException
         out_list = list()
@@ -257,7 +281,14 @@ class RadioProvider(Configurable):
             new_example = deepcopy(example)
             for key in audio_keys:
                 new_example[key] = new_example[key][..., idx, :]
-            out_list.append(new_example)
+            if np.sum(new_example[K.TARGET_TIME_VAD]) >= self.min_speech_activity:
+                out_list.append(new_example)
+
+        if len(out_list) == 0:
+            from lazy_dataset.core import FilterException
+            print('This should not happen regularly')
+            raise FilterException
+
         shuffle_fn(out_list)
         return out_list
 
@@ -287,6 +318,8 @@ class RadioProvider(Configurable):
         return iterator
 
     def get_train_iterator(self, time_segment=None):
+        self.is_training = True
+        self.transform.is_training = True
         iterator = self.database.get_dataset_train()
         iterator = self.update_iterator(iterator)
         unbatch = False
@@ -296,18 +329,22 @@ class RadioProvider(Configurable):
             assert not (self.time_segments and time_segment)
             iterator = iterator.map(partial(self.segment))
             unbatch = True
-        return self.get_map_iterator(iterator, self.batch_size,
-                                     unbatch=unbatch)
+        return self.get_map_iterator(
+            iterator, self.batch_size, unbatch=unbatch)
 
     def get_eval_iterator(self, num_examples=-1):
+        self.is_training = False
+        self.transform.is_training = False
         iterator = self.database.get_dataset_validation()
         iterator = self.update_iterator(iterator)
         iterator = iterator[:num_examples]
-        return self.get_map_iterator(iterator, self.batch_size_eval,
-                                     unbatch=False)
+        return self.get_map_iterator(
+            iterator, self.batch_size_eval, unbatch=False)
 
     def get_predict_iterator(self, num_examples=-1, dataset=None,
                              iterable_apply_fn=None, filter_fn=None):
+        self.is_training = False
+        self.transform.is_training = False
         if dataset is None:
             iterator = self.database.get_dataset_test()
         else:

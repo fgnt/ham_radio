@@ -20,19 +20,21 @@ class HamRadioLibrispeechKeys:
 dset2id_mapping = Dispatcher(
     train=(0, 140),
     dev=(176, 190),
-    eval=(141, 175)
+    eval=(141, 175),
 )
 
 SAMPLE_RATE = 16000
 HRL_K = HamRadioLibrispeechKeys
 
 
-def get_example(audio: Path, org_json, transcription_json, dset_name):
+def get_example(audio: Path, org_json, transcription_json, dset_name,
+                id_sub_fix=None):
+    audio = Path(audio).expanduser().resolve()
     station, _id = audio.stem.split('__')
     num_samples = pb.io.audioread.audio_length(audio)
 
     ex = org_json[_id].copy()
-    activity = jsonpickle.loads(ex[K.ACTIVTY])[:]
+    activity = jsonpickle.loads(ex[K.ACTIVITY])[:]
     assert np.isclose(activity.shape[-1], num_samples, 0.1), (
         activity.shape, num_samples)
 
@@ -48,8 +50,8 @@ def get_example(audio: Path, org_json, transcription_json, dset_name):
             station += '_1'
         else:
             raise ValueError()
-    indices = np.where(activity[:-1] != activity[1:])[0]
-    indices = np.concatenate([[0], indices, [len(activity)]], axis=0)
+    if id_sub_fix:
+        station += '_' + id_sub_fix
     first_value = activity[0]
     assert first_value == 0
     clean_dir = audio.parents[3] / 'clean' / dset_name
@@ -79,12 +81,12 @@ def create_database(database_path):
                 key, ex = get_example(audio, orig_json, transcription_json,
                                       dset_name)
                 ex_dict[key] = ex
-                ids = dirs.name.split('__')[1].split('_')
-                assert id_min <= int(ids[0]) < id_max, (dirs.name, dset_name)
-                assert id_min < int(ids[1]) <= id_max, (dirs.name, dset_name)
-                db[K.DATASETS][f'{dset_name}_{"_".join(ids)}'] = ex_dict
+            ids = dirs.name.split('__')[1].split('_')
+            assert id_min <= int(ids[0]) < id_max, (dirs.name, dset_name)
+            assert id_min < int(ids[1]) <= id_max, (dirs.name, dset_name)
+            db[K.DATASETS][f'{dset_name}_{"_".join(ids)}'] = ex_dict
         db[K.ALIAS].update({dset_name: [key for key in db[K.DATASETS].keys()
-                                   if dset_name in key]})
+                                        if dset_name in key]})
         print(dset_name, 'includes the following ids', db[K.ALIAS][dset_name])
     return db
 
