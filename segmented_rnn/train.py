@@ -48,7 +48,7 @@ def config():
             'pooling': {'factory': Pool1d, 'pooling':'max', 'pool_size': 10,
                         'padding': None},
             'recall_weight': 1.,
-            'input_norm': None
+            'input_norm': 'l2_norm',
         },
         'optimizer.factory': Adam,
         'stop_trigger': (int(1e5), 'iteration'),
@@ -59,6 +59,9 @@ def config():
     })
     stft_size = 256
     provider_opts = deflatten({
+        'database': {
+            'factory': 'segmented_rnn.database.HamRadioLibrispeech',
+        },
         'transform': {
             'factory': Transformer,
             'stft': dict(size=stft_size, shift=80, window_length=200),
@@ -75,7 +78,7 @@ def config():
         ),
         'time_segments': 32000,
     })
-    database_name = None
+    database_name = 'ham_radio'
     storage_dir = None
     add_name = None
     if storage_dir is None:
@@ -106,6 +109,7 @@ def config():
         early_stopping_patience=None
     )
 
+
 @ex.named_config
 def rnn():
     trainer_opts = dict(model=dict(
@@ -124,26 +128,6 @@ def rnn():
 
 
 @ex.named_config
-def segment_rnn():
-    trainer_opts = dict(model=dict(
-        rnn={
-            'factory': 'torch.nn.GRU',
-            'input_size': 64,
-            'hidden_size': 256,
-            'num_layers': 2,
-            'dropout': 0.5,
-            'bidirectional': True,
-            'batch_first': False,
-        },
-        segmented_rnn=True,
-        window_length=50,
-        window_shift=25,
-        cnn_1d=None
-    ))
-    add_name = 'segmented_rnn'
-
-
-@ex.named_config
 def cnn():
     trainer_opts = dict(model=dict(
         cnn_1d={
@@ -159,31 +143,6 @@ def cnn():
         },
         rnn=None,
     ))
-
-
-@ex.named_config
-def fearless():
-    provider_opts = {
-        'database': {
-            'factory': 'segmented_rnn.database.Fearless',
-        }
-    }
-    database_name = 'fearless'
-    trainer_opts = {
-            'model': {'input_norm': None}
-        }
-
-@ex.named_config
-def ham_radio():
-    provider_opts = {
-        'database': {
-            'factory': 'segmented_rnn.database.HamRadioLibrispeech',
-        }
-    }
-    trainer_opts = {
-        'model': {'input_norm': 'l2_norm'}
-    }
-    database_name = 'ham_radio'
 
 
 @ex.capture

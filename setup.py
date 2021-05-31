@@ -18,14 +18,14 @@ here = path.abspath(path.dirname(__file__))
 # Get the long description from the relevant file
 
 setup(
-    name='segmented_rnn',
+    name='ham_radio',
 
     # Versions should comply with PEP440.  For a discussion on single-sourcing
     # the version across setup.py and the project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
     version='0.0.0',
 
-    description='A collection of torch based speech separation networks',
+    description='An example SAD training on a ham radio database',
 
     # The project's main homepage.
     url='https://ei.uni-paderborn.de/nt/',

@@ -6,10 +6,10 @@ from pathlib import Path
 
 from paderbox.utils.mapping import Dispatcher
 
-from segmented_rnn import keys as K
-from segmented_rnn.database.utils import click_common_options
-from segmented_rnn.database.utils import dump_database_as_json
-from segmented_rnn.database.utils import check_audio_files_exist
+from ham_radio import keys as K
+from ham_radio.database.utils import click_common_options
+from ham_radio.database.utils import dump_database_as_json
+from ham_radio.database.utils import check_audio_files_exist
 
 class HamRadioLibrispeechKeys:
     NOISE = 'noise'

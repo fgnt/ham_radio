@@ -1,15 +1,13 @@
-import math
 from collections import defaultdict
 
 import numpy as np
 import padertorch as pt
 import torch
-import torch.nn.functional as F
 from einops import rearrange
-from paderbox.array import segment_axis
 from padertorch.summary.tbx_utils import spectrogram_to_image, mask_to_image
-from segmented_rnn import keys as K
-from segmented_rnn.system.module import CNN1d, CNN2d, Pool1d
+from padertorch.contrib.jensheit.eval_sad import smooth_vad
+from ham_radio import keys as K
+from ham_radio.system.module import CNN1d, CNN2d, Pool1d
 
 
 class BinomialClassifier(pt.Model):
@@ -40,36 +38,6 @@ class BinomialClassifier(pt.Model):
     >>> outputs[0].shape
     torch.Size([4, 10, 100])
     >>> review = cnn.review(inputs, outputs)
-
-    >>> segmented_rnn = BinomialClassifier(**{\
-        'cnn_2d': CNN2d(**{\
-            'in_channels': 1,\
-            'hidden_channels': 32,\
-            'num_layers': 3,\
-            'out_channels': 8,\
-            'kernel_size': 3\
-        }),\
-        'rnn': torch.nn.GRU(**{\
-                'input_size':512,\
-                'hidden_size':256,\
-                'num_layers':2,\
-                'dropout':0.5,\
-                'bidirectional':True,\
-                'batch_first':False\
-        }),\
-        'pooling': Pool1d('max', 10),\
-        'segmented_rnn': True,\
-        'cnn_1d':None\
-    })
-    >>> inputs = {\
-        'speech_features': torch.zeros(3, 1, 400, 64),\
-        'target_vad': torch.zeros(3, 1, 400),\
-        'num_frames': [500]*3\
-    }
-    >>> outputs = segmented_rnn(inputs)
-    >>> outputs[0].shape
-    torch.Size([3, 10, 16])
-
      >>> rnn = BinomialClassifier(**{\
         'cnn_2d': CNN2d(**{\
             'in_channels': 1,\
@@ -109,7 +77,6 @@ class BinomialClassifier(pt.Model):
             input_norm='l2_norm',
             recall_weight=1.,
             activation='sigmoid',
-            segmented_rnn=False,
             window_length=50,
             window_shift=25
     ):
@@ -129,7 +96,6 @@ class BinomialClassifier(pt.Model):
         self.recall_weight = recall_weight
         self.activiation = pt.mappings.ACTIVATION_FN_MAP[activation]()
         self.norm = input_norm
-        self.segmented_rnn = segmented_rnn
         self.window_length = window_length
         self.window_shift = window_shift
 
@@ -155,29 +121,12 @@ class BinomialClassifier(pt.Model):
 
     def rnn(self, x, seq_len=None):
         if self._rnn is not None:
-            if self.segmented_rnn:
-                batch_size = x.shape[0]
-                x_list = self.segment(x)
-                x_list = rearrange(x_list, 'b f l t -> (b l) t f')
-                x, _ = self._rnn(x_list)
-                x = rearrange(x[..., -1, :], '(b l) f -> b l f', b=batch_size)
-                if seq_len is not None:
-                    seq_len = [math.ceil(seq / self.window_shift)
-                               for seq in seq_len]
-            else:
-                x = x.permute(0, 2, 1)
-                x, _ = self._rnn(x)
+            x = x.permute(0, 2, 1)
+            x, _ = self._rnn(x)
             x = self.rnn_dnn(x)
             x = x.permute(0, 2, 1)
         return x, seq_len
 
-    def segment(self, x):
-        size = self.window_length - 1 - ((x.shape[-1] - 1) % self.window_shift)
-        pad = []
-        pad.extend([size // 2, math.ceil(size / 2)])
-        x = F.pad(x, tuple(pad), mode='constant')
-        return segment_axis(
-            x, self.window_length, self.window_shift, axis=-1, end=None)
 
     def forward(self, inputs):
         x = inputs[K.SPEECH_FEATURES]
@@ -218,10 +167,6 @@ class BinomialClassifier(pt.Model):
             seq_len = outputs[1][idx]
             scores = self.maybe_pool(scores)
             scores = scores[..., :seq_len]
-            if self.segmented_rnn:
-                target = self.segment(target)
-                target = torch.max(target, dim=-1)[0]
-
             targets = target[..., :scores.shape[-1]]
             scores = scores[..., :targets.shape[-1]]
             assert targets.dim() == scores.dim(), (targets.shape, scores.shape)
@@ -298,44 +243,6 @@ class BinomialClassifier(pt.Model):
 
     def get_per_frame_vad(self, model_out, threshold,
                           transform=None, segment_length=400):
-        if self.segmented_rnn:
-            shift = self.window_shift
-            slc = self.window_length - 1 - ((segment_length - 1) % shift)
-            num_segments = math.ceil(segment_length / shift)
-            model_out_np = model_out.reshape(-1, num_segments)
-            model_out_np[model_out_np > threshold] = 1
-            model_out_np[model_out_np < 1] = 0
-            model_out = transform.activity_frequency_to_time(
-                model_out_np, self.window_length, shift)
-            model_out = model_out[..., slc // 2: -int(np.ceil(slc / 2))]
-            assert model_out.shape[-1] == segment_length, model_out.shape
-            return model_out
-        else:
             batch_size = model_out.shape[0]
             return smooth_vad(model_out.reshape(batch_size, -1).copy(),
                               threshold=threshold)
-
-
-def smooth_vad(vad_pred, window=25, divisor=1, threshold=0.1):
-    """
-    >>> vad_pred = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.2, 0.1])
-    >>> smooth_vad(vad_pred, window=3, divisor=1, threshold=0.3)
-    array([0., 0., 1., 1., 1., 1., 1., 1., 0.])
-    >>> smooth_vad(vad_pred, window=5, divisor=1, threshold=0.5)
-    array([0., 0., 0., 0., 1., 1., 1., 1., 0.])
-    >>> smooth_vad(vad_pred, window=5, divisor=2, threshold=0.5)
-    array([0., 0., 0., 1., 1., 1., 1., 1., 1.])
-    >>> smooth_vad(vad_pred[None, None], window=5, divisor=2, threshold=0.5)
-    array([[[0., 0., 0., 1., 1., 1., 1., 1., 1.]]])
-    """
-    vad_pred = vad_pred.copy()
-    vad_pred[vad_pred > threshold] = 1.
-    vad_pred[vad_pred < 1] = 0.
-    shift = window // 2
-    padding = [(0, 0)] * (vad_pred.ndim - 1) + [(shift, shift)]
-    vad_padded = np.pad(vad_pred, padding, 'edge')
-    vad_segmented = segment_axis(vad_padded, window, 1, end='pad')
-    vad_segmented = np.sum(vad_segmented, axis=-1)
-    vad_pred[vad_segmented >= shift // divisor] = 1
-    vad_pred[vad_segmented < shift // divisor] = 0
-    return vad_pred

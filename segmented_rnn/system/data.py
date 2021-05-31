@@ -1,7 +1,6 @@
 import collections
 from copy import deepcopy
 from functools import partial
-from pathlib import Path
 from hashlib import md5
 from random import shuffle as shuffle_fn
 
@@ -13,12 +12,9 @@ import paderbox as pb
 import padertorch as pt
 from paderbox.array import segment_axis
 from paderbox.transform import STFT
-from paderbox.transform.module_fbank import MelTransform
-from paderbox.transform.module_filter import \
-    preemphasis_with_offset_compensation
 from padertorch.base import Configurable
-from segmented_rnn import keys as K
-from segmented_rnn.system.utils import Padder
+from ham_radio import keys as K
+from ham_radio.system.utils import Padder
 
 
 class Transformer(Configurable):
@@ -28,21 +24,9 @@ class Transformer(Configurable):
         super().finalize_dogmatic_config(config)
         config['stft'] = dict(factory=STFT, size=256, shift=80,
                               window_length=200, fading=False)
-        if 'mel' in config.keys() and config['mel'] is not None:
-            config['mel'] = dict(
-                factory=MelTransform, sample_rate=8000,
-                fft_length=config['stft']['size'],
-                n_mels=23, fmin=0, fmax=None, log=False
-            )
-            config['mel']['fmax'] = config['mel']['sample_rate'] // 2
 
-    def __init__(self, stft, mel=None, low_cut: int = 5, high_cut: int = -5,
-                 preemphasis_factor=0., log=False):
+    def __init__(self, stft, log=False):
         self.stft = stft
-        self.mel = mel
-        self.low_cut = low_cut
-        self.high_cut = high_cut
-        self.preemphasis_factor = preemphasis_factor
         self.log = log
 
     def inverse(self, signal):
@@ -72,8 +56,6 @@ class Transformer(Configurable):
         return example
 
     def transform_obs(self, signal):
-        signal = preemphasis_with_offset_compensation(
-            signal, self.preemphasis_factor)
         signal_stft = self.stft(signal)
         feature = np.abs(signal_stft)
 
@@ -358,32 +340,3 @@ class RadioProvider(Configurable):
         if filter_fn is not None:
             iterator = iterator.filter(filter_fn)
         return iterator
-
-
-class KFoldProvider(RadioProvider):
-    def __init__(
-            self,
-            database,
-            transform,
-            collate,
-            audio_keys: tuple = (K.OBSERVATION,),
-            shuffle: bool = True,
-            batch_size: int = 1,
-            batch_size_eval: int = None,
-            num_workers: int = 4,
-            buffer_size: int = 20,
-            backend: str = 't',
-            drop_last: bool = False,
-            time_segments: int = 32000,
-            sample_rate: int = 8000,
-            k_folds: int = 10,
-    ):
-        super().__init__(
-            database=database, transform=transform, collate=collate,
-            audio_keys=audio_keys, shuffle=shuffle,
-            batch_size=batch_size, batch_size_eval=batch_size_eval,
-            num_workers=num_workers, buffer_size=buffer_size,
-            backend=backend, drop_last=drop_last,
-            time_segments=time_segments, sample_rate=sample_rate
-        )
-        self.k_folds = k_folds
