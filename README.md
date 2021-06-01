@@ -27,7 +27,7 @@ python -m ham_radio.database.ham_radio.create_json \
     python -m ham_radio.train with cnn
     ``` 
  The trained model and the event files are written to 
- /PATH/TO/MODEL_DIR/ham_radio/SADModel_{number_of_train_runs}
+ `/PATH/TO/MODEL_DIR/ham_radio/SADModel_{number_of_train_runs}`
  For more information about the training script and the event files visit 
  our [padertorch repository](https://github.com/fgnt/padertorch)
  
