@@ -2,15 +2,13 @@
 from copy import copy
 
 import numpy as np
-import padertorch as pt
 import torch
 import torch.nn.functional as F
-from einops import rearrange
+from ham_radio.system.utils import Pool1d, Pool2d
+from ham_radio.system.utils import to_pair, Pad, Cut
 from padertorch.base import Module
 from padertorch.ops.mappings import ACTIVATION_FN_MAP
 from padertorch.utils import to_list
-from segmented_rnn.system.utils import Pool1d, Pool2d
-from segmented_rnn.system.utils import to_pair, Pad, Cut
 from torch import nn
 
 
@@ -217,7 +215,7 @@ class _Conv(Module):
         out_shape = np.array(out_shape - 1) * np.array(self.stride) + 1
 
         in_shape = out_shape + (
-                np.array(self.dilation) * (np.array(self.kernel_size) -1)
+                np.array(self.dilation) * (np.array(self.kernel_size) - 1)
         )
 
         in_shape = np.where(
@@ -270,7 +268,8 @@ class _CNN(Module):
         self.strides = to_list(stride, num_layers)
         self.poolings = to_list(pooling, num_layers)
         self.pool_sizes = to_list(pool_size, num_layers)
-        self.out_channels = out_channels if out_channels else self.hidden_channels[
+        self.out_channels = out_channels if out_channels else \
+        self.hidden_channels[
             -1]
 
         convs = list()
@@ -317,6 +316,7 @@ class _CNN(Module):
         for conv in self.convs:
             in_shape = conv.get_in_shape(in_shape)
         return in_shape
+
 
 class CNN1d(_CNN):
     conv_cls = Conv1d

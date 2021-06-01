@@ -4,8 +4,8 @@ import math
 import numpy as np
 import torch
 import torch.nn.functional as F
+from ham_radio.system.utils import to_list, to_pair
 from padertorch.base import Module
-from segmented_rnn.system.utils import to_list, to_pair
 
 
 class Pad(Module):
@@ -150,4 +150,3 @@ class Unpool2d(Module):
                 x, indices=indices
             )
         return x
-

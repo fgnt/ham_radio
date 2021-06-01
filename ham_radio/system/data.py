@@ -4,17 +4,16 @@ from functools import partial
 from hashlib import md5
 from random import shuffle as shuffle_fn
 
-import jsonpickle
 import numpy as np
-
-from lazy_dataset.core import FilterException
 import paderbox as pb
 import padertorch as pt
-from paderbox.array import segment_axis
-from paderbox.transform import STFT
-from padertorch.base import Configurable
 from ham_radio import keys as K
 from ham_radio.system.utils import Padder
+from paderbox.array import segment_axis
+from paderbox.array.interval import ArrayInterval
+from paderbox.transform import STFT
+from padertorch.base import Configurable
+from lazy_dataset.core import FilterException
 
 
 class Transformer(Configurable):
@@ -205,24 +204,12 @@ class RadioProvider(Configurable):
             out_dict[K.NUM_SAMPLES] = example[K.NUM_SAMPLES]
 
         if K.ALIGNMENT_ACTIVITY in example:
-            out_dict[K.TARGET_TIME_VAD] = jsonpickle.loads(
-                example[K.ALIGNMENT_ACTIVITY])[:]
+            out_dict[K.TARGET_TIME_VAD] = ArrayInterval.from_str(
+                *example[K.ALIGNMENT_ACTIVITY])[:]
         elif K.ACTIVITY:
-            out_dict[K.TARGET_TIME_VAD] = jsonpickle.loads(
-                example[K.ACTIVITY])[:]
+            out_dict[K.TARGET_TIME_VAD] = ArrayInterval.from_str(
+                *example[K.ACTIVITY])[:]
         out_dict['audio_keys'].append(K.TARGET_TIME_VAD)
-        if K.TARGET_SHIFT in example:
-            out_dict[K.TARGET_SHIFT]= example[K.TARGET_SHIFT]
-        else:
-            out_dict[K.TARGET_SHIFT] = 0
-        if 'snr' in example:
-            out_dict['snr'] = example['snr']
-        else:
-            out_dict['snr'] = 'unknown'
-        if 'band' in example:
-            out_dict['band'] = example['band']
-        else:
-            out_dict['band'] = 'unknown'
         return out_dict
 
     def read_audio(self, example):
@@ -267,7 +254,6 @@ class RadioProvider(Configurable):
                 out_list.append(new_example)
 
         if len(out_list) == 0:
-            from lazy_dataset.core import FilterException
             print('This should not happen regularly')
             raise FilterException
 

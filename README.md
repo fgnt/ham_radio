@@ -2,41 +2,39 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/fgnt/lazy_dataset/blob/master/LICENSE)
 
-If you are just interested in the database, 
-you use the following download command:
-```bash
-    
-``` 
-
 If you want to train a neural network for speech activity detection 
 on the ham_radio database follow these steps:
 1. Clone this repository and install it with pip
-1. Download the Database using 
+1. Download the database with 
 ```bash
-    python -m segmented_rnn.database.ham_radio.download \
-        with database_path=/PATH/TO/HAM_RADIO_DB
-```    
-1. Create a database json
-    * For the Ham-Radio-Database use the following code which will by default 
-    will write a json file to ./ham_radio.json:
+    wget -qO- https://zenodo.org/record/4247491/files/ham_rdaio.tar.gz.parta{a,b,c,d,e} \
+	| tar -C /PATH/TO/HAM_RADIO_DB/ -zx --checkpoint=10000 --checkpoint-action=echo="%u/5530000 %c"
+``` 
+where `/PATH/TO/HAM_RADIO_DB` has to be replaced with the chosen 
+database directory
+1. Set the variable ```HAM_RADIO_JSON_PATH``` to the file name the database json
+should be written to
+    ```export HAM_RADIO_JSON_PATH=/PATH/TO/JSON```
+1. Create a database json with
 ```bash
-python -m segmented_rnn.database.ham_radio.create_json \
-    -j /PATH/TO/JSON -db /PATH/TO/HAM_RADIO_DB
-```           
-1. Set the variable ```HAM_RADIO_JSON``` to your written json file:\
-    ```export HAM_RADIO_JSON=/PATH/TO/JSON```
-2. Set a directory to which to write all models with
-    ```export MODEL_DIR=/PATH/TO/MODEL_DIR```
+python -m ham_radio.database.ham_radio.create_json \
+    with database_path=/PATH/TO/HAM_RADIO_DB
+```
+1. Set a directory to which to write all models with
+    ```export STORAGE_ROOT=/PATH/TO/MODEL_DIR```
 1. Start a training with:
     ```bash
-    python -m segmented_rnn.train with cnn
+    python -m ham_radio.train with cnn
     ``` 
+ The trained model and the event files are written to 
+ /PATH/TO/MODEL_DIR/ham_radio/SADModel_{number_of_train_runs}
+ For more information about the training script and the event files visit 
+ our [padertorch repository](https://github.com/fgnt/padertorch)
  
- If you want to reduce the required space for the gpu you can reduce
-  the batch size by adding ```provider_opts.batch_size=4``` or any other
-   value for the batch size.
+ If you want to reduce the required space for the gpu you can reduce 
+ the batch size by adding ```provider_opts.batch_size=4``` or any other 
+ value for the batch size.
    
- If you want to use a simple RNN structure instead of the
+ If you want to use a simple RNN structure instead of the  
  RNN you can replace ```cnn```  with ```rnn```
- 
  Most paramters are adjustable in a similar fashion.

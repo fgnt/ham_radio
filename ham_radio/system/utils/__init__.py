@@ -5,8 +5,6 @@ def to_pair(x):
 
 from .batch import Padder
 from .cnn import Pad, Cut, Pool1d, Pool2d, Unpool1d, Unpool2d
-from .demodulation_offset import simulate_demodulation_offset
-from .demodulation_offset import DemodulationOffsetSimulator
 
 
 __all__ = [
@@ -19,6 +17,4 @@ __all__ = [
     Pool2d,
     Unpool1d,
     Unpool2d,
-    simulate_demodulation_offset,
-    DemodulationOffsetSimulator,
 ]

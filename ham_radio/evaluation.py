@@ -1,14 +1,15 @@
+from pathlib import Path
+
 import dlp_mpi
+import ham_radio.keys as K
+import numpy as np
+import paderbox as pb
+import padertorch as pt
 import sacred
 import torch
-import numpy as np
-from pathlib import Path
-import paderbox as pb
-import jsonpickle
-import padertorch as pt
-from segmented_rnn.system.data import RadioProvider
-from segmented_rnn.system.model import BinomialClassifier
-import segmented_rnn.keys as K
+from ham_radio.system.data import RadioProvider
+from ham_radio.system.model import SADModel
+from paderbox.array.interval import ArrayInterval
 
 ex = sacred.Experiment('Test Plath')
 sample_rate = 8000
@@ -116,7 +117,7 @@ def get_tp_fp_tn_fn(
 @ex.automain
 def main(model_dir, num_ths, dataset, buffer, out_dir, checkpoint, segments):
     model_dir = Path(model_dir).expanduser().resolve()
-    model_cls = BinomialClassifier
+    model_cls = SADModel
     model = model_cls.from_config_and_checkpoint(
         config_path=model_dir / 'init.json',
         checkpoint_path=model_dir / 'checkpoints' / checkpoint,
@@ -144,14 +145,13 @@ def main(model_dir, num_ths, dataset, buffer, out_dir, checkpoint, segments):
         segmented_model_out = torch.max(
             segmented_model_out[0], dim=1)[0].detach().numpy()
 
-        annotation = jsonpickle.loads(example[K.ALIGNMENT_ACTIVITY])[:]
+        annotation = ArrayInterval.from_str(*example[K.ALIGNMENT_ACTIVITY])[:]
         annotation = adjust_annotation_fn(
             annotation, sample_rate, buffer_zone=buffer)
         for idx, th in enumerate(np.linspace(0, 1, num_ths)):
             th = np.round(th, 2)
             model_out = model.get_per_frame_vad(
-                segmented_model_out.copy(), th, provider.transform,
-                segment_length=segments
+                segmented_model_out.copy(), th
             ).reshape(-1)
             vad = provider.transform.activity_frequency_to_time(
                 model_out, transform.stft.window_length, transform.stft.shift)

@@ -4,15 +4,15 @@ import numpy as np
 import padertorch as pt
 import torch
 from einops import rearrange
-from padertorch.summary.tbx_utils import spectrogram_to_image, mask_to_image
-from padertorch.contrib.jensheit.eval_sad import smooth_vad
 from ham_radio import keys as K
 from ham_radio.system.module import CNN1d, CNN2d, Pool1d
+from padertorch.contrib.jensheit.eval_sad import smooth_vad
+from padertorch.summary.tbx_utils import spectrogram_to_image, mask_to_image
 
 
-class BinomialClassifier(pt.Model):
+class SADModel(pt.Model):
     """
-    >>> cnn = BinomialClassifier(**{\
+    >>> cnn = SADModel(**{\
         'cnn_2d': CNN2d(**{\
             'in_channels': 1,\
             'hidden_channels': 32,\
@@ -38,7 +38,7 @@ class BinomialClassifier(pt.Model):
     >>> outputs[0].shape
     torch.Size([4, 10, 100])
     >>> review = cnn.review(inputs, outputs)
-     >>> rnn = BinomialClassifier(**{\
+     >>> rnn = SADModel(**{\
         'cnn_2d': CNN2d(**{\
             'in_channels': 1,\
             'hidden_channels': 32,\
@@ -126,7 +126,6 @@ class BinomialClassifier(pt.Model):
             x = self.rnn_dnn(x)
             x = x.permute(0, 2, 1)
         return x, seq_len
-
 
     def forward(self, inputs):
         x = inputs[K.SPEECH_FEATURES]
@@ -241,8 +240,8 @@ class BinomialClassifier(pt.Model):
                 summary['scalars'][f'dcf_{thres}'] = 0.75 * pfn + 0.25 * pfp
         return summary
 
-    def get_per_frame_vad(self, model_out, threshold,
-                          transform=None, segment_length=400):
-            batch_size = model_out.shape[0]
-            return smooth_vad(model_out.reshape(batch_size, -1).copy(),
-                              threshold=threshold)
+    @staticmethod
+    def get_per_frame_vad(model_out, threshold):
+        batch_size = model_out.shape[0]
+        return smooth_vad(model_out.reshape(batch_size, -1).copy(),
+                          threshold=threshold)

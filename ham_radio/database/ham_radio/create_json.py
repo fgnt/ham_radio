@@ -1,15 +1,16 @@
-import click
-import jsonpickle
 import numpy as np
 import paderbox as pb
 from pathlib import Path
 
 from paderbox.utils.mapping import Dispatcher
+from paderbox.array.interval import ArrayInterval
 
 from ham_radio import keys as K
-from ham_radio.database.utils import click_common_options
 from ham_radio.database.utils import dump_database_as_json
 from ham_radio.database.utils import check_audio_files_exist
+from sacred import Experiment
+
+ex = Experiment('Create database json')
 
 class HamRadioLibrispeechKeys:
     NOISE = 'noise'
@@ -34,11 +35,11 @@ def get_example(audio: Path, org_json, transcription_json, dset_name,
     num_samples = pb.io.audioread.audio_length(audio)
 
     ex = org_json[_id].copy()
-    activity = jsonpickle.loads(ex[K.ACTIVITY])[:]
+    activity = ArrayInterval.from_str(*ex[K.ACTIVITY])
     assert np.isclose(activity.shape[-1], num_samples, 0.1), (
         activity.shape, num_samples)
 
-    activity = jsonpickle.loads(ex[K.ALIGNMENT_ACTIVITY])[:]
+    activity = ArrayInterval.from_str(*ex[K.ALIGNMENT_ACTIVITY])
     assert activity.shape[-1] == num_samples, (activity.shape, num_samples)
     # assert np.isclose(np.sum(ex['speech_length']), np.sum(activity), 0.1), (
     #     sum(ex['speech_length']), sum(activity))
@@ -91,15 +92,29 @@ def create_database(database_path):
     return db
 
 
-@click.command()
-@click_common_options('ham_radio.json', '/net/vol/ham/Cut')
+@ex.config
+def config():
+    database_path = None
+    assert database_path is not None, 'You have to define a database path to' \
+                                      'create a database json'
+    assert Path(database_path).is_dir(), database_path
+    json_path = None
+    if json_path is None:
+        import os
+        assert 'HAM_RADIO_JSON' in os.environ, (
+                'If json_path is not defined in the function call the global '
+                'variable HAM_RADIO_JSON has to be set'
+        )
+        json_path = os.environ['HAM_RADIO_JSON']
+    assert not Path(json_path).exists(), (
+            'The specified json already exists. Please delete '
+            'or rename the file'
+    )
+
+@ex.automain
 def main(database_path, json_path):
-    json = create_database(database_path)
+    json = create_database(Path(database_path))
     print("Check that all wav files in the json exist.")
     check_audio_files_exist(json, speedup="thread")
     print("Finished check.")
     dump_database_as_json(json_path, json)
-
-
-if __name__ == '__main__':
-    main()

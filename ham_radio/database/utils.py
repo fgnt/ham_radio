@@ -2,7 +2,6 @@ import pathlib
 from pathlib import Path
 import collections
 
-import click
 
 from paderbox.io.json_module import dump_json
 
@@ -159,90 +158,3 @@ def default_dict():
         )
     )
     return database
-
-
-def print_template():
-    """ Prints the template used for the json file
-
-    :return:
-    """
-    print('<root>\n'
-          '..<train>\n'
-          '....annotations\n'
-          '......<scenario>\n'
-          '........<utterance_id>\n'
-          '..........nsamples: <nsamples>\n'
-          '....<flists>\n'
-          '......<file_type> (z.B. wav)\n'
-          '..........<scenario> (z.B. tr05_simu, tr05_real...)\n'
-          '............<utterance_id>\n'
-          '..............<observed>\n'
-          '................<A>\n'
-          '..................path\n'
-          '................<B>\n'
-          '..................path\n'
-          '..............<image>\n'
-          '................<A>\n'
-          '..................path\n'
-          '................<B>\n'
-          '..................path\n'
-          '..............<source>\n'
-          '................path\n'
-          '\n'
-          '..<dev>\n'
-          '..<test>\n'
-          '..<orth>\n'
-          '....<word>\n'
-          '......<utterance_id>\n'
-          '....<phoneme>\n'
-          '......<utterance_id>\n'
-          '........string\n'
-          '..<flists>\n'
-          '....Flist_1\n'
-          '....Flist_2\n')
-
-
-def combine_decorators(*decorators):
-    def f(c):
-        for decorator in decorators:
-            c = decorator(c)
-        return c
-
-    return f
-
-
-def click_common_options(
-        default_json_path='db.json',
-        default_database_path='.'
-):
-    json_path_option = click.option(
-        '--json-path', '-j',
-        default=default_json_path,
-        help=f'Output path for the generated JSON file. If the '
-             f'file exists, it gets overwritten. Defaults to '
-             f'"{default_json_path}".',
-        type=click.Path(dir_okay=False, writable=True),
-        callback=click_convert_to_path,
-    )
-    if default_database_path is None:
-        return json_path_option
-    else:
-        return combine_decorators(
-            json_path_option,
-            click.option('--database-path', '-db', default=default_database_path,
-                         help=f'Path where the database is located. Defaults to '
-                              f'"{default_database_path}".',
-                         type=click.Path(),
-                         callback=click_convert_to_path)
-        )
-
-
-def click_convert_to_path(ctx, param, value):
-    """
-    Callback function for click.option to ensure all pathes are PosixPathes.
-    """
-    assert value is not None, (ctx, param, value)
-    if isinstance(value, str):
-        value = pathlib.Path(value)
-
-    return value
