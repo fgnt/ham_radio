@@ -42,6 +42,7 @@ The trained model and the event files are written to
  Most paramters are adjustable in a similar fashion.
  
  # Citation
+ ```
  @misc{heitkaemper2021database,
       title={A Database for Research on Detection and Enhancement of Speech Transmitted over HF links}, 
       author={Jens Heitkaemper and Joerg Schmalenstroeer and Joerg Ullmann and Valentin Ion and Reinhold Haeb-Umbach},
@@ -50,3 +51,4 @@ The trained model and the event files are written to
       archivePrefix={arXiv},
       primaryClass={cs.SD}
 }
+```
