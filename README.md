@@ -1,4 +1,4 @@
-# Segmented RNN
+# Neural network based SAD
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/fgnt/lazy_dataset/blob/master/LICENSE)
 
@@ -40,3 +40,13 @@ The trained model and the event files are written to
  If you want to use a simple RNN structure instead of the  
  RNN you can replace ```cnn```  with ```rnn```
  Most paramters are adjustable in a similar fashion.
+ 
+ # Citation
+ @misc{heitkaemper2021database,
+      title={A Database for Research on Detection and Enhancement of Speech Transmitted over HF links}, 
+      author={Jens Heitkaemper and Joerg Schmalenstroeer and Joerg Ullmann and Valentin Ion and Reinhold Haeb-Umbach},
+      year={2021},
+      eprint={2106.02472},
+      archivePrefix={arXiv},
+      primaryClass={cs.SD}
+}
