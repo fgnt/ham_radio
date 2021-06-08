@@ -18,9 +18,9 @@ sample_rate = 8000
 def config():
     model_dir = None
     num_ths = 201
-    dataset = 'test'
+    dataset = 'eval'
     checkpoint = 'ckpt_best_loss.pth'
-    segments = 400
+    segments = None
     buffer = 1
     out_dir = None
 
