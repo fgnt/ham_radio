@@ -11,7 +11,7 @@ from ham_radio.system.data import RadioProvider
 from ham_radio.system.model import SADModel
 from paderbox.array.interval import ArrayInterval
 
-ex = sacred.Experiment('Test Plath')
+ex = sacred.Experiment('Test SAD')
 sample_rate = 8000
 
 @ex.config
