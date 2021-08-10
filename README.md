@@ -4,10 +4,10 @@
 
 If you want to train a neural network for speech activity detection 
 on the ham_radio database follow these steps:
-1. Clone this repository and install it with pip
+1. Clone this repository and install it with pip. (We assume that Cython and numpy are already installed)
 1. Download the database with 
 ```bash
-    wget -qO- https://zenodo.org/record/4247491/files/ham_radio.tar.gz.parta{a,b,c} \
+    wget -qO- https://zenodo.org/record/5175960/files/ham_radio.tar.gz.parta{a,b,c} \
 	| tar -C /PATH/TO/HAM_RADIO_DB/ -zx --checkpoint=10000 --checkpoint-action=echo="%u/5530000 %c"
 ``` 
 where `/PATH/TO/HAM_RADIO_DB` has to be replaced with the chosen 

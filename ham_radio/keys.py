@@ -13,6 +13,7 @@ ORIGINAL_TRANSCRIPTION = 'original_transcription'
 SPEAKER_ID = 'speaker_id'
 NUM_SPEAKERS = 'num_speaker'
 NOISE = 'noise'
+DELAY = 'delay'
 
 # keys for transformer
 OBSERVATION_STFT = 'observation_stft'

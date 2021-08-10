@@ -1,15 +1,20 @@
+import os
 from pathlib import Path
 
-import dlp_mpi
 import ham_radio.keys as K
 import numpy as np
 import paderbox as pb
 import padertorch as pt
 import sacred
 import torch
+from tqdm import tqdm
 from ham_radio.system.data import RadioProvider
 from ham_radio.system.model import SADModel
 from paderbox.array.interval import ArrayInterval
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
+from time import time
+
 
 ex = sacred.Experiment('Test SAD')
 sample_rate = 8000
@@ -23,6 +28,7 @@ def config():
     segments = None
     buffer = 1
     out_dir = None
+    num_jobs = os.cpu_count()
 
 
 def adjust_annotation_fn(annotation, sample_rate, buffer_zone=1):
@@ -114,8 +120,54 @@ def get_tp_fp_tn_fn(
     return tp, fp, tn, fn
 
 
+@ex.capture
+def evaluate(example, model, provider, segments, num_ths, buffer):
+    audio = provider.read_audio(example)[K.AUDIO_DATA][K.OBSERVATION]
+    # print(torch_example['speech_features'][0].shape)
+    tic = time()
+    torch_example = provider.transform.audio_to_input_dict(
+        audio=audio,
+        segments=segments, padder=provider.collate
+    )
+    with torch.no_grad():
+        segmented_model_out, seq_len = model(torch_example)
+
+    segmented_model_out = torch.max(
+        segmented_model_out, dim=1)[0].detach().numpy()
+    toc = (time() - tic) / example['num_samples'] * 8000
+    annotation = ArrayInterval.from_str(*example[K.ALIGNMENT_ACTIVITY])[:]
+    annotation = adjust_annotation_fn(
+        annotation, sample_rate, buffer_zone=buffer)
+
+    if isinstance(num_ths, list):
+        ths = num_ths
+        num_ths = len(num_ths)
+    elif isinstance(num_ths, int):
+        ths = np.linspace(0, 1, num_ths)
+    else:
+        raise ValueError
+
+    tp_fp_tn_fn = np.zeros((num_ths, 4), dtype=np.int32)
+    for idx, th in enumerate(ths):
+        th = np.round(th, 4)
+        model_out = model.get_per_frame_vad(
+            segmented_model_out.copy(), th
+        ).reshape(-1)
+        vad = provider.transform.activity_frequency_to_time(
+            model_out, provider.transform.stft.window_length,
+            provider.transform.stft.shift
+        )
+        num_samples = min(annotation.shape[-1], vad.shape[-1])
+        # num_samples = min(annotation.shape[-1], vad.shape[-1])
+        tp_fp_tn_fn[idx] = np.array(get_tp_fp_tn_fn(
+            annotation[:num_samples], vad[:num_samples],
+            sample_rate=sample_rate, adjust_annotation=False
+        ))
+    return ths, tp_fp_tn_fn, vad, toc
+
+
 @ex.automain
-def main(model_dir, num_ths, dataset, buffer, out_dir, checkpoint, segments):
+def main(model_dir, dataset, out_dir, checkpoint, num_jobs):
     model_dir = Path(model_dir).expanduser().resolve()
     model_cls = SADModel
     model = model_cls.from_config_and_checkpoint(
@@ -127,55 +179,30 @@ def main(model_dir, num_ths, dataset, buffer, out_dir, checkpoint, segments):
 
     provider_opts = pb.io.load_json(model_dir / 'init.json')['provider_opts']
     provider = RadioProvider.from_config(provider_opts)
-    transform = provider.transform
-    padder = provider.collate
 
-    tp_fp_tn_fn = np.zeros((num_ths, 4), dtype=int)
-    for example in dlp_mpi.split_managed(
-            provider.database.get_dataset(dataset),
-            is_indexable=True,
-            allow_single_worker=True,
-            progress_bar=True
-    ):
-        torch_example = transform.audio_to_input_dict(
-            audio=provider.read_audio(example)[K.AUDIO_DATA][K.OBSERVATION],
-            segments=segments, padder=padder
-        )
-        segmented_model_out = model(torch_example)
-        segmented_model_out = torch.max(
-            segmented_model_out[0], dim=1)[0].detach().numpy()
+    tp_fp_tn_fn = list()
+    iterable = provider.database.get_dataset(dataset)
+    thresholds = list()
+    timeing = list()
+    with ThreadPoolExecutor(num_jobs) as ex:
+        for ths, result, _, tic in tqdm(ex.map(
+                partial(evaluate, model=model, provider=provider),
+                iterable
+        ), total=len(iterable)):
+            thresholds.append(ths)
+            tp_fp_tn_fn.append(result)
+            timeing.append(tic)
+    assert len(tp_fp_tn_fn) == len(iterable), (len(tp_fp_tn_fn), len(iterable))
+    tp_fp_tn_fn = np.sum(tp_fp_tn_fn, axis=0)
+    assert all([np.array_equal(thresholds[0], ths) for ths in thresholds]), thresholds
+    thresholds = thresholds[0]
+    if out_dir is None:
+        out_dir = model_dir
+    else:
+        out_dir = Path(out_dir).expanduser().resolve()
 
-        annotation = ArrayInterval.from_str(*example[K.ALIGNMENT_ACTIVITY])[:]
-        annotation = adjust_annotation_fn(
-            annotation, sample_rate, buffer_zone=buffer)
-        for idx, th in enumerate(np.linspace(0, 1, num_ths)):
-            th = np.round(th, 2)
-            model_out = model.get_per_frame_vad(
-                segmented_model_out.copy(), th
-            ).reshape(-1)
-            vad = provider.transform.activity_frequency_to_time(
-                model_out, transform.stft.window_length, transform.stft.shift)
-            num_samples = min(annotation.shape[-1], vad.shape[-1])
-            out = get_tp_fp_tn_fn(
-                annotation[:num_samples], vad[:num_samples],
-                sample_rate=sample_rate, adjust_annotation=False
-            )
-            tp_fp_tn_fn[idx] = [tp_fp_tn_fn[idx][idy] + o for idy, o in
-                                enumerate(out)]
-
-
-    dlp_mpi.barrier()
-    tp_fp_tn_fn_gather = dlp_mpi.gather(tp_fp_tn_fn, root=dlp_mpi.MASTER)
-    if dlp_mpi.IS_MASTER:
-        if out_dir is None:
-            out_dir = model_dir
-        else:
-            out_dir = Path(out_dir).expanduser().resolve()
-        tp_fp_tn_fn = np.zeros((num_ths, 4), dtype=int)
-        for array in tp_fp_tn_fn_gather:
-            tp_fp_tn_fn += array
-
-        dset_name = '_' + '_'.join(pt.utils.to_list(dataset))
-        (out_dir / f'tp_fp_tn_fn_{dset_name}.txt').write_text('\n'.join([
-            ' '.join([str(v) for v in value]) for value in tp_fp_tn_fn.tolist()
-        ]))
+    dset_name = '_'.join(pt.utils.to_list(dataset))
+    out_dict = {'sad': {
+        ths: value for ths, value in zip(thresholds, tp_fp_tn_fn.tolist())}}
+    out_dict['timeing'] = np.mean(timeing)
+    pb.io.dump_json(out_dict, out_dir / f'tp_fp_tn_fn_{dset_name}.json')
