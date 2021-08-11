@@ -227,6 +227,17 @@ class RadioProvider(Configurable):
                 key: pb.io.load_audio(example[K.AUDIO_PATH][key])
                 for key in self.audio_keys
             }
+        if K.DELAY in example and K.SPEECH_SOURCE in self.audio_keys:
+            delay = example[K.DELAY]
+            source = example[K.AUDIO_DATA][K.SPEECH_SOURCE]
+            if delay > 0:
+                example[K.AUDIO_DATA][K.SPEECH_SOURCE] = np.concatenate(
+                    [np.zeros_like(source)[:delay], source[:-delay]])
+            elif delay < 0:
+                example[K.AUDIO_DATA][K.SPEECH_SOURCE] = np.concatenate(
+                    [source[-delay:], np.zeros_like(source)[:-delay]])
+            else:
+                example[K.AUDIO_DATA][K.SPEECH_SOURCE] = source
         return example
 
     def segment(self, example):
