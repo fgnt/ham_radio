@@ -12,9 +12,9 @@ on the ham_radio database follow these steps:
 ``` 
 where `/PATH/TO/HAM_RADIO_DB` has to be replaced with the chosen 
 database directory
-1. Set the variable ```HAM_RADIO_JSON_PATH``` to the file name the database json
+1. Set the variable ```HAM_RADIO_JSON``` to the file name the database json
 should be written to
-    ```export HAM_RADIO_JSON_PATH=/PATH/TO/JSON```
+    ```export HAM_RADIO_JSON=/PATH/TO/JSON```
 1. Create a database json with
 ```bash
 python -m ham_radio.database.ham_radio.create_json \
