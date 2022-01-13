@@ -2,6 +2,7 @@ import numpy as np
 import paderbox as pb
 from pathlib import Path
 
+from collections import defaultdict
 from paderbox.utils.mapping import Dispatcher
 from paderbox.array.interval import ArrayInterval
 
@@ -85,11 +86,40 @@ def get_example(audio: Path, org_json, transcription_json, dset_name,
     ex[K.DELAY] = delay
     ex[K.AUDIO_PATH] = audio_dict
     ex[K.ORIGINAL_TRANSCRIPTION] = ex['transcriptions']
-    ex[K.TRANSCRIPTION] = transcription_json[_id]
+    if id_sub_fix:
+        ex[K.TRANSCRIPTION] = transcription_json[_id]['transcriptions']
     return ex_id, ex
 
 
-def create_database(database_path):
+def add_eval_shift(shift_database_path, database_path):
+    orig_json = pb.io.load_json(shift_database_path / 'annotations.json')
+    delay_json = pb.io.load_json(shift_database_path / 'delay.json')
+    updated_activity_path = database_path / 'interference_activity.json'
+    if updated_activity_path.is_file():
+        updated_activity = pb.io.load_json(updated_activity_path)
+    else:
+        updated_activity = None
+    dset_dict = dict()
+    dset_name = 'eval_shift'
+    aliases = defaultdict(list)
+    for dirs in (shift_database_path / 'noisy'/ dset_name).glob('*'):
+        ex_dict = dict()
+        ids = dirs.name.split('__')[1].split('_')
+        shift = ids[-1]
+        for audio in dirs.glob('*.wav'):
+            key, ex = get_example(audio, orig_json, orig_json,
+                                  dset_name, updated_activity, shift,
+                                  delay_json=delay_json)
+            ex[K.TARGET_SHIFT] = int(shift.replace('OS', ''))
+            ex_dict[key] = ex
+        aliases[shift].append(f'{dset_name}_{"_".join(ids)}')
+        dset_dict[f'{dset_name}_{"_".join(ids)}'] = ex_dict
+    aliases.update({dset_name: [key for key in dset_dict.keys()
+                                if dset_name in key]})
+    return dset_dict, aliases
+
+
+def create_database(database_path, shift_data_path):
     orig_json = pb.io.load_json(database_path / 'annotations.json')
     delay_json = pb.io.load_json(database_path / 'delay.json')
     transcription_json = pb.io.load_json(database_path / 'transcription.json')
@@ -110,6 +140,13 @@ def create_database(database_path):
         db[K.ALIAS].update({dset_name: [key for key in db[K.DATASETS].keys()
                                         if dset_name in key]})
         print(dset_name, 'includes the following ids', db[K.ALIAS][dset_name])
+        if shift_data_path:
+            dset_dict, aliases = add_eval_shift(shift_data_path, database_path)
+            dset_name = 'eval_shift'
+            db[K.DATASETS].update(dset_dict)
+            db[K.ALIAS].update(aliases)
+            print(dset_name, 'includes the following ids',
+                  db[K.ALIAS][dset_name])
     return db
 
 
@@ -132,9 +169,13 @@ def config():
             'or rename the file'
     )
 
+    shift_data_path = None # Path to the frequency shifted ham radio data.
+
 @ex.automain
-def main(database_path, json_path):
-    json = create_database(Path(database_path))
+def main(database_path, json_path, shift_data_path):
+    if shift_data_path is not None:
+        shift_data_path = Path(shift_data_path).expanduser().resolve()
+    json = create_database(Path(database_path), shift_data_path)
     print("Check that all wav files in the json exist.")
     check_audio_files_exist(json, speedup="thread")
     print("Finished check.")
