@@ -169,6 +169,7 @@ class RadioProvider(Configurable):
             time_segments: int = 32000,
             sample_rate: int = 8000,
             min_speech_activity: int = 0,
+            interference_activity: bool = False
     ):
         self.database = database
         self.transform = transform if transform is not None else lambda x: x
@@ -184,6 +185,7 @@ class RadioProvider(Configurable):
         self.time_segments = time_segments
         self.sample_rate = sample_rate
         self.min_speech_activity = min_speech_activity
+        self.interference_activity = interference_activity
 
     @staticmethod
     def _example_id_to_rng(example_id):
@@ -209,6 +211,15 @@ class RadioProvider(Configurable):
         elif K.ACTIVITY:
             out_dict[K.TARGET_TIME_VAD] = ArrayInterval.from_str(
                 *example[K.ACTIVITY])[:]
+
+        if self.interference_activity:
+            assert K.INTERFERENCE_ACTIVITY in example, example.keys()
+            interference_activity = ArrayInterval.from_serializable(
+                example[K.INTERFERENCE_ACTIVITY])[:]
+            activity = out_dict[K.TARGET_TIME_VAD] + interference_activity
+            activity[activity > 0] = 1
+            out_dict[K.TARGET_TIME_VAD] = activity.astype(bool)
+
         out_dict['audio_keys'].append(K.TARGET_TIME_VAD)
         return out_dict
 

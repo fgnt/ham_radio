@@ -30,7 +30,7 @@ HRL_K = HamRadioLibrispeechKeys
 
 
 def get_example(audio: Path, org_json, transcription_json, dset_name,
-                id_sub_fix=None, delay_json=None):
+                updated_activity=None, id_sub_fix=None, delay_json=None):
     audio = Path(audio).expanduser().resolve()
     station, _id = audio.stem.split('__')
     num_samples = pb.io.audioread.audio_length(audio)
@@ -67,7 +67,30 @@ def get_example(audio: Path, org_json, transcription_json, dset_name,
     }
 
     ex_id = station + '_' + _id
-    delay = delay_json[dset_name][ex_id]
+    if delay_json:
+        delay = delay_json[dset_name][ex_id]
+    else:
+        delay = 0
+
+
+    if updated_activity and ex_id in updated_activity:
+        inference_activity = ArrayInterval.from_str(
+            updated_activity[ex_id][0], len(activity))
+        if delay > 0:
+            ex[K.INTERFERENCE_ACTIVITY] = ArrayInterval(np.concatenate(
+                [np.zeros(delay), inference_activity[:-delay]]).astype(
+                bool)).to_serializable()
+        elif delay < 0:
+            ex[K.INTERFERENCE_ACTIVITY] = ArrayInterval(np.concatenate(
+                [inference_activity[-delay:], np.zeros(-delay)]).astype(
+                bool)).to_serializable()
+        else:
+            ex[K.INTERFERENCE_ACTIVITY] = ArrayInterval(
+                inference_activity).to_serializable()
+    elif updated_activity:
+        ex[K.INTERFERENCE_ACTIVITY] = ArrayInterval(
+            np.zeros_like(activity)).to_serializable()
+
     if delay > 0:
         ex[K.ACTIVITY] = ArrayInterval(np.concatenate(
             [np.zeros(delay), activity[:-delay]]).astype(bool)).to_serializable()
@@ -78,7 +101,6 @@ def get_example(audio: Path, org_json, transcription_json, dset_name,
             [activity[-delay:], np.zeros(-delay)]).astype(bool)).to_serializable()
         ex[K.ALIGNMENT_ACTIVITY] = ArrayInterval(np.concatenate(
             [ali_activity[-delay:], np.zeros(-delay)]).astype(bool)).to_serializable()
-        # target_out = np.concatenate([target[-delay:], np.zeros(-delay)])
     else:
         ex[K.ACTIVITY] = activity.to_serializable()
         ex[K.ALIGNMENT_ACTIVITY] = ali_activity.to_serializable()
@@ -123,6 +145,13 @@ def create_database(database_path, shift_data_path):
     orig_json = pb.io.load_json(database_path / 'annotations.json')
     delay_json = pb.io.load_json(database_path / 'delay.json')
     transcription_json = pb.io.load_json(database_path / 'transcription.json')
+
+    updated_activity_path = database_path / 'interference_activity.json'
+    if updated_activity_path.is_file():
+        updated_activity = pb.io.load_json(updated_activity_path)
+    else:
+        updated_activity = None
+
     db = {K.DATASETS: {}, K.ALIAS: {}}
     for dset in (database_path / 'noisy').glob('*'):
         dset_name = dset.name
@@ -131,7 +160,8 @@ def create_database(database_path, shift_data_path):
             ex_dict = dict()
             for audio in dirs.glob('*.wav'):
                 key, ex = get_example(audio, orig_json, transcription_json,
-                                      dset_name, delay_json=delay_json)
+                                      dset_name, updated_activity,
+                                      delay_json=delay_json)
                 ex_dict[key] = ex
             ids = dirs.name.split('__')[1].split('_')
             assert id_min <= int(ids[0]) < id_max, (dirs.name, dset_name)
